@@ -2,6 +2,50 @@
 
 Newest first.
 
+## 2026-11-01 — Qualcomm drivers from other phones (fix/blob-driver-zips, CI running, NOT device-tested in the app)
+
+**Why:** Hugo (Discord, 06:38 EST) imported a Qualcomm driver shared as an
+AdrenoTools zip (891.11, Adreno 840): "Could not load this driver". His two
+points, both true in main 29c7820: import kept only `*.so` (Drivers.kt), and the
+CTS process never looks in the driver's folder for the libraries it ships
+(vkshim.c plain dlopen, no search path). His fix idea: LD_LIBRARY_PATH = driver dir.
+
+**Checked:** StevenMXZ/Adrenotools-Drivers 849.zip (21 files) and 842.13.zip (28),
+all .so + meta.json; vulkan.adreno.so needs libgsl/libadreno_utils/libllvm-glnext/
+display mapper libs from the zip. Pocket FIT (Android 14), CTS from the installed
+v0.1 app, run from the terminal:
+- old shim: `library "libadreno_utils.so" not found ... namespace (default)` (= Hugo).
+- LD_LIBRARY_PATH (Hugo's idea): the CTS itself can't start —
+  `cannot locate symbol _ZNSt3__122__libcpp_verbose_abortEPKcz referenced by
+  d849/android.hardware.common-V2-ndk.so` (the CTS's own libandroid/libmediandk
+  deps get the zip's copies). Works on Hugo's newer Android, not on 14.
+- These zips' libraries need ~11 libc++ functions Android 14 doesn't have
+  (/system and vndk-v34 libc++ checked) → they can't run on Android 14 at all
+  (842.13 meta even says minApi 35).
+
+**Built (4059568):** vkshim opens the driver's own libraries from its folder
+first (needed ones deepest first, then every other shipped .so, for names the
+driver dlopens at run time), skips copies that can't load, no LD_LIBRARY_PATH;
+DRIVERLAB_VK_LIBDIRS for subfolders. Import keeps every file (zip-slip check,
+4000 files / 2 GB caps), picks the driver by meta libraryName / vulkan.* name,
+stores minApi + file count. Card: real reason first, "made for a newer Android",
+tap to expand. README + credit Hugo.
+
+**Proof so far (terminal, Pocket FIT, shim built with Termux clang):** the phone's
+OWN Qualcomm driver packed like a shared zip (vulkan.adreno.so + 11 vendor libs in
+a folder): old shim fails like Hugo's; new shim "opened 12 of the driver's own
+libraries" → info.device_properties PASS. 849 zip: clear per-library reasons.
+Quirk: loaded directly (new shim AND Hugo's LD_LIBRARY_PATH way) the driver names
+the GPU "Adreno (TM) 33" instead of "750" (same driver version) — not caused by
+the loader; open.
+
+**CI:** 41328224928 (headSha 40595684) running.
+
+**Next / resume:** CI green → stage APK in Download (sha256 host+device) → ask
+user to install on the Pocket FIT (import the own-driver zip + 849, check card
+text, Turnip still loads) → user tests 849/842.13 on the Galaxy Fold 8 (Adreno
+840, Android 17), where they should load. Release = user's word (0.1.1).
+
 ## 2026-11-01 — merged to main (user go)
 
 User: "yes merge to main and delete the old APKs". Backup ref
