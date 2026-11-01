@@ -2,6 +2,25 @@
 
 Newest first.
 
+## 2026-11-01 — v0.1 RELEASED (feat/v0.1, release from e26682e1)
+
+**Release:** https://github.com/The412Banner/DriverLab/releases/tag/v0.1 — tag v0.1 →
+e26682e10cc3d1380d6f488d0d7209939bec1a33 (the built commit, CI 41290089892),
+Latest, assets DriverLab-v0.1-e26682e1.apk (sha256 2cf7729877e999b507930cfe4027ce16b7818a414d2650b3e5d3be7680c0161e)
++ .sha256. Published with gh from the exact APK installed and checked on the Duo
+(downloaded back: byte-identical).
+
+**Device check of e26682e1:** test-clear Pass, test-composite2 Fail (exit -1),
+internal export zips removed after saving to Downloads, test_results zip names
+like the original (test-clear.log/.rd), no app crash.
+
+**Open / next:** merge feat/v0.1 → main needs the user's go (backup ref first);
+cosmetic: Tests header total leaves out the 68 GLES programs; landscape test list
+gets short when the Run bar shows; register diff could highlight init registers;
+older staged APKs in Download (62fb66cd, b0f6b21a, f0be2226) can be removed.
+
+**Resume:** nothing running. App v0.1 installed on the Duo.
+
 ## 2026-11-01 — v0.1 build-out (feat/v0.1, building)
 
 **Why:** compare the Qualcomm system driver with Turnip builds on the Retroid
