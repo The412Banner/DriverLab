@@ -159,7 +159,7 @@ private fun ProfileCard(p: GameFeatures.Profile, shown: List<DriverInfo>, report
                 val (text, color) = if (rep == null) "Not checked" to status.skipped else {
                     val v = GameFeatures.verdict(p, rep)
                     when {
-                        v.missing > 0 -> "${v.missing} required missing" to status.failed
+                        v.missing > 0 -> ("${v.missing} required missing" + if (v.unknown > 0) " · ${v.unknown} not reported" else "") to status.failed
                         v.unknown > 0 -> "${v.unknown} not reported" to status.warning
                         else -> "Has everything required" to status.passed
                     } .let { (t, c) -> (t + if (v.optionalMissing > 0) " · ${v.optionalMissing} optional missing" else "") to c }

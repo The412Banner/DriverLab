@@ -281,9 +281,12 @@ class FeatureChecker(
                 val qpa = File(work, "features.qpa")
                 val p = CtsRunner(context).start(CtsRunner.Launch(caselist, qpa, d, drivers.libFile(d), work))
                 val tail = ArrayDeque<String>()
-                p.inputStream.bufferedReader().useLines { seq ->
-                    for (l in seq) { if (l.isNotBlank()) { tail.addLast(l); if (tail.size > 6) tail.removeFirst() } }
+                runCatching {
+                    p.inputStream.bufferedReader().useLines { seq ->
+                        for (l in seq) { if (l.isNotBlank()) { tail.addLast(l); if (tail.size > 6) tail.removeFirst() } }
+                    }
                 }
+                Thread.interrupted()
                 p.waitFor()
                 val rep = GameFeatures.parseQpa(qpa, d.probe?.apiVersion.orEmpty())
                 if (rep.extensions.isEmpty() && rep.features.isEmpty()) {

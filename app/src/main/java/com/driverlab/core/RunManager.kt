@@ -375,15 +375,21 @@ class RunManager(
             val tail = ArrayDeque<String>()
             var problem: String? = null
             out.bufferedWriter().use { w ->
-                p.inputStream.bufferedReader().use { rd ->
-                    while (true) {
-                        val line = rd.readLine() ?: break
-                        w.write(line); w.write("\n")
-                        if (line.isNotBlank() && !line.startsWith("\t") && !line.startsWith("> [") && !line.startsWith("< [")) {
-                            tail.addLast(line); if (tail.size > 6) tail.removeFirst()
+                try {
+                    p.inputStream.bufferedReader().use { rd ->
+                        while (true) {
+                            val line = rd.readLine() ?: break
+                            w.write(line); w.write("\n")
+                            if (line.isNotBlank() && !line.startsWith("\t") && !line.startsWith("> [") && !line.startsWith("< [")) {
+                                tail.addLast(line); if (tail.size > 6) tail.removeFirst()
+                            }
+                            if (problem == null && (line.contains("ERROR") || line.startsWith("Failed"))) problem = line.trim()
                         }
-                        if (problem == null && (line.contains("ERROR") || line.startsWith("Failed"))) problem = line.trim()
                     }
+                } catch (e: java.io.IOException) {
+                    problem = problem ?: "Reading the test output failed (${e.message ?: e.javaClass.simpleName})"
+                    Thread.interrupted()
+                    if (p.isAlive) p.destroyForcibly()
                 }
             }
             val exit = runCatching { p.waitFor() }.getOrDefault(-1)
@@ -496,8 +502,9 @@ class RunManager(
                     return "captures/$base.rd.gz"
                 }
 
+                var readError: String? = null
                 out.bufferedWriter().use { w ->
-                    p.inputStream.bufferedReader().use { rd ->
+                    try { p.inputStream.bufferedReader().use { rd ->
                         while (true) {
                             val line = rd.readLine() ?: break
                             lastLine.set(System.currentTimeMillis())
@@ -537,8 +544,15 @@ class RunManager(
                                 else -> if (cur != null && slice.length < 65536) slice.append(line).append('\n')
                             }
                         }
+                    } } catch (e: java.io.IOException) {
+                        // The pipe can fail instead of ending (seen once as "read interrupted"):
+                        // treat it as the end of the output, so the batch restarts instead of the run stopping.
+                        readError = e.message ?: e.javaClass.simpleName
+                        Thread.interrupted()
+                        runCatching { w.write("[DriverLab] reading the test output failed: $readError\n") }
                     }
                 }
+                if (readError != null && p.isAlive) p.destroyForcibly()
                 val exit = runCatching { p.waitFor() }.getOrDefault(-1)
                 watchdog.interrupt()
                 processes.remove(p)
@@ -556,7 +570,8 @@ class RunManager(
                     val msg = when (status) {
                         TestStatus.TIMEOUT -> "No result after ${req.timeoutSec} s; stopped"
                         TestStatus.STOPPED -> "Stopped by user"
-                        else -> "Process ended without a result (exit ${exitText(exit)})"
+                        else -> readError?.let { "Reading the test output failed ($it)" }
+                            ?: "Process ended without a result (exit ${exitText(exit)})"
                     }
                     val cap = if (single != null) captureFor(name) else null
                     finish(name, status, msg, curStart, slice, if (single != null) recLog else null, cap, rawOut = if (single != null) out else null, batch = bn)
