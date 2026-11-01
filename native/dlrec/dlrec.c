@@ -1,24 +1,25 @@
 // SPDX-License-Identifier: MIT
-// DriverLab recorder (libdlrec.so), loaded with LD_PRELOAD into a test
-// process that uses the system (KGSL) Vulkan/GLES driver. It watches the
-// KGSL ioctls and writes every GPU submit as a freedreno ".rd" capture
-// (gzip), the format Mesa's cffdump and DriverLab read.
+// DriverLab recorder (libdlrec.so), loaded with LD_PRELOAD into every test
+// process DriverLab starts.
 //
-// Unlike the original freedreno libwrap (Rob Clark, which this follows for
-// the file format), it never changes the driver's requests: buffer flags are
-// left alone and GPU addresses are looked up with GPUOBJ_INFO when needed.
+// - Always: makes stdout line-buffered (the CTS never flushes its progress).
+// - DLREC_PATH set: records every KGSL GPU submit of the system (Qualcomm)
+//   driver as a freedreno ".rd" capture (gzip), the format Mesa's cffdump and
+//   DriverLab read. Driver requests are never changed: buffer flags are left
+//   alone and GPU addresses are looked up with GPUOBJ_INFO when needed.
+// - DLREC_LOG set: writes a log of the driver's kernel calls in the same
+//   format as Rob Clark's freedreno libwrap ("-" = stdout, so it interleaves
+//   with the test's own output like libwrap did; otherwise a file path).
+// - Exports rd_start/rd_end/rd_write_section, which the freedreno GLES tests
+//   call (weak symbols) to mark test cases inside the capture.
 //
-// It also makes stdout line-buffered in every process it is loaded into.
+// Other variables: DLREC_BUF_CAP (skip non-command buffers bigger than this
+// many bytes, 0 = all), DLREC_TESTNAME (RD_TEST section text).
 //
-// Environment:
-//   DLREC_PATH     output file (.rd.gz); recording is off when unset
-//   DLREC_BUF_CAP  skip buffers larger than this many bytes unless they hold
-//                  the command stream being submitted (0 = record all)
-//   DLREC_LOG      optional text log of KGSL activity
+// The .rd format and the log format follow freedreno libwrap (Rob Clark, MIT).
 #define BIONIC_IOCTL_NO_SIGNEDNESS_OVERLOAD 1
 #define _GNU_SOURCE
-#include <dlfcn.h>
-#include <errno.h>
+#include <ctype.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <stdarg.h>
@@ -40,6 +41,7 @@ struct kgsl_devinfo {
     uint32_t device_id; uint32_t chip_id; uint32_t mmu_enabled;
     unsigned long gmem_gpubaseaddr; uint32_t gpu_id; size_t gmem_sizebytes;
 };
+struct kgsl_drawctxt_create { uint32_t flags; uint32_t drawctxt_id; };
 struct kgsl_gpumem_alloc_id {
     uint32_t id; uint32_t flags; size_t size; size_t mmapsize;
     unsigned long gpuaddr; unsigned long __pad[2];
@@ -62,6 +64,7 @@ struct kgsl_gpu_command {
     uint32_t context_id; uint32_t timestamp;
 };
 #define IOCTL_KGSL_DEVICE_GETPROPERTY _IOWR(KGSL_IOC_TYPE, 0x2, struct kgsl_device_getproperty)
+#define IOCTL_KGSL_DRAWCTXT_CREATE    _IOWR(KGSL_IOC_TYPE, 0x13, struct kgsl_drawctxt_create)
 #define IOCTL_KGSL_GPUMEM_ALLOC_ID    _IOWR(KGSL_IOC_TYPE, 0x34, struct kgsl_gpumem_alloc_id)
 #define IOCTL_KGSL_GPUMEM_FREE_ID     _IOWR(KGSL_IOC_TYPE, 0x35, struct kgsl_gpumem_free_id)
 #define IOCTL_KGSL_GPUOBJ_ALLOC       _IOWR(KGSL_IOC_TYPE, 0x45, struct kgsl_gpuobj_alloc)
@@ -69,27 +72,47 @@ struct kgsl_gpu_command {
 #define IOCTL_KGSL_GPUOBJ_INFO        _IOWR(KGSL_IOC_TYPE, 0x47, struct kgsl_gpuobj_info)
 #define IOCTL_KGSL_GPU_COMMAND        _IOWR(KGSL_IOC_TYPE, 0x4A, struct kgsl_gpu_command)
 
-/* Names for the per-test log (same style as freedreno libwrap logs). */
+/* ---- freedreno rd format (Mesa src/freedreno/common/redump.h) ---- */
+enum rd_sect_type { RD_NONE, RD_TEST, RD_CMD, RD_GPUADDR, RD_CONTEXT, RD_CMDSTREAM,
+       RD_CMDSTREAM_ADDR, RD_PARAM, RD_FLUSH, RD_PROGRAM, RD_VERT_SHADER, RD_FRAG_SHADER,
+       RD_BUFFER_CONTENTS, RD_GPU_ID, RD_CHIP_ID };
+
 static const char *ioctl_name(unsigned nr)
 {
     switch (nr) {
     case 0x02: return "IOCTL_KGSL_DEVICE_GETPROPERTY";
+    case 0x06: return "IOCTL_KGSL_DEVICE_WAITTIMESTAMP";
     case 0x07: return "IOCTL_KGSL_DEVICE_WAITTIMESTAMP_CTXTID";
+    case 0x10: return "IOCTL_KGSL_RINGBUFFER_ISSUEIBCMDS";
+    case 0x11: return "IOCTL_KGSL_CMDSTREAM_READTIMESTAMP";
+    case 0x12: return "IOCTL_KGSL_CMDSTREAM_FREEMEMONTIMESTAMP";
     case 0x13: return "IOCTL_KGSL_DRAWCTXT_CREATE";
     case 0x14: return "IOCTL_KGSL_DRAWCTXT_DESTROY";
+    case 0x21: return "IOCTL_KGSL_SHAREDMEM_FREE";
+    case 0x2f: return "IOCTL_KGSL_GPUMEM_ALLOC";
+    case 0x31: return "IOCTL_KGSL_TIMESTAMP_EVENT_OLD";
     case 0x33: return "IOCTL_KGSL_TIMESTAMP_EVENT";
     case 0x34: return "IOCTL_KGSL_GPUMEM_ALLOC_ID";
     case 0x35: return "IOCTL_KGSL_GPUMEM_FREE_ID";
+    case 0x36: return "IOCTL_KGSL_GPUMEM_GET_INFO";
+    case 0x37: return "IOCTL_KGSL_GPUMEM_SYNC_CACHE";
     case 0x38: return "IOCTL_KGSL_PERFCOUNTER_GET";
     case 0x39: return "IOCTL_KGSL_PERFCOUNTER_PUT";
+    case 0x3a: return "IOCTL_KGSL_PERFCOUNTER_QUERY";
+    case 0x3b: return "IOCTL_KGSL_PERFCOUNTER_READ";
+    case 0x3d: return "IOCTL_KGSL_SUBMIT_COMMANDS";
     case 0x40: return "IOCTL_KGSL_SYNCSOURCE_CREATE";
     case 0x41: return "IOCTL_KGSL_SYNCSOURCE_DESTROY";
+    case 0x42: return "IOCTL_KGSL_SYNCSOURCE_CREATE_FENCE";
+    case 0x43: return "IOCTL_KGSL_SYNCSOURCE_SIGNAL_FENCE";
     case 0x45: return "IOCTL_KGSL_GPUOBJ_ALLOC";
     case 0x46: return "IOCTL_KGSL_GPUOBJ_FREE";
     case 0x47: return "IOCTL_KGSL_GPUOBJ_INFO";
     case 0x48: return "IOCTL_KGSL_GPUOBJ_IMPORT";
     case 0x49: return "IOCTL_KGSL_GPUOBJ_SYNC";
     case 0x4A: return "IOCTL_KGSL_GPU_COMMAND";
+    case 0x4B: return "IOCTL_KGSL_PREEMPTIONCOUNTER_QUERY";
+    case 0x4C: return "IOCTL_KGSL_GPUOBJ_SET_INFO";
     default: return NULL;
     }
 }
@@ -99,8 +122,19 @@ static const char *prop_name(uint32_t t)
     switch (t) {
     case 0x01: return "KGSL_PROP_DEVICE_INFO";
     case 0x02: return "KGSL_PROP_DEVICE_SHADOW";
+    case 0x03: return "KGSL_PROP_DEVICE_POWER";
+    case 0x04: return "KGSL_PROP_SHMEM";
+    case 0x05: return "KGSL_PROP_SHMEM_APERTURES";
+    case 0x06: return "KGSL_PROP_MMU_ENABLE";
+    case 0x07: return "KGSL_PROP_INTERRUPT_WAITS";
+    case 0x08: return "KGSL_PROP_VERSION";
+    case 0x09: return "KGSL_PROP_GPU_RESET_STAT";
+    case 0x10: return "KGSL_PROP_PWRCTRL";
+    case 0x12: return "KGSL_PROP_PWR_CONSTRAINT";
     case 0x13: return "KGSL_PROP_UCHE_GMEM_VADDR";
+    case 0x14: return "KGSL_PROP_SP_GENERIC_MEM";
     case 0x15: return "KGSL_PROP_UCODE_VERSION";
+    case 0x16: return "KGSL_PROP_GPMU_VERSION";
     case 0x17: return "KGSL_PROP_HIGHEST_BANK_BIT";
     case 0x18: return "KGSL_PROP_DEVICE_BITNESS";
     case 0x19: return "KGSL_PROP_DEVICE_QDSS_STM";
@@ -119,13 +153,9 @@ static const char *prop_name(uint32_t t)
     case 0x2e: return "KGSL_PROP_IS_FASTBLEND_ENABLED";
     case 0x2f: return "KGSL_PROP_UCHE_TRAP_BASE";
     case 0x31: return "KGSL_PROP_GPU_SECURE_VA_SIZE";
-    default: return "?";
+    default: return "unknown";
     }
 }
-
-/* ---- freedreno rd format (Mesa src/freedreno/common/redump.h) ---- */
-enum { RD_TEST = 1, RD_CMD = 2, RD_GPUADDR = 3, RD_CMDSTREAM_ADDR = 6,
-       RD_BUFFER_CONTENTS = 12, RD_GPU_ID = 13, RD_CHIP_ID = 14 };
 
 struct bo {
     struct bo *next;
@@ -138,9 +168,19 @@ struct bo {
 };
 
 static pthread_mutex_t g_lock = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
+static struct bo *g_bos;
+static gzFile g_gz;
+static int g_enabled;          /* recording on */
+static uint64_t g_cap;
+static int g_log = -1;         /* log fd, -1 = off */
+static uint64_t g_chip_id;
+static uint32_t g_gpu_id;
+static int g_header_written;
+static unsigned char g_kgsl_fd[4096];
+
 /* The real calls go straight to the kernel: no dlsym() during process start,
- * no recursion through malloc/TLS, and bionic's wrappers for these four are
- * plain system calls anyway. close() is not wrapped (fdsan owns it). */
+ * no recursion through malloc/TLS, and bionic's wrappers for these are plain
+ * system calls anyway. close() is not wrapped (fdsan owns it). */
 static int real_ioctl(int fd, unsigned long req, void *arg)
 {
     return (int)syscall(__NR_ioctl, fd, req, arg);
@@ -154,22 +194,13 @@ static int real_munmap(void *addr, size_t len)
     return (int)syscall(__NR_munmap, addr, len);
 }
 
-static struct bo *g_bos;
-static gzFile g_gz;
-static int g_enabled = -1;
-static uint64_t g_cap;
-static int g_log = -1;
-static uint64_t g_chip_id;
-static uint32_t g_gpu_id;
-static int g_header_written;
-static unsigned char g_kgsl_fd[4096];
-static unsigned long g_submits;
-
+/* ---- logging (libwrap format) ---- */
+static void logf_(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 static void logf_(const char *fmt, ...)
 {
     if (g_log < 0)
         return;
-    char buf[512];
+    char buf[1024];
     va_list ap;
     va_start(ap, fmt);
     int n = vsnprintf(buf, sizeof(buf), fmt, ap);
@@ -178,36 +209,69 @@ static void logf_(const char *fmt, ...)
         write(g_log, buf, n < (int)sizeof(buf) ? n : (int)sizeof(buf) - 1);
 }
 
-static void log_hex(const void *data, size_t len)
+static void log_hexdump(const void *data, size_t size)
 {
-    const uint8_t *p = data;
-    if (len > 256)
-        len = 256;
-    for (size_t off = 0; off < len; off += 16) {
-        char line[128];
-        int n = snprintf(line, sizeof(line), "\t\t\t%08zx ", off);
-        for (size_t i = off; i < off + 16 && i < len; i++)
-            n += snprintf(line + n, sizeof(line) - n, " %02x", p[i]);
+    if (g_log < 0 || !data)
+        return;
+    const unsigned char *b = data;
+    char line[128], alpha[17];
+    if (size > 4096)
+        size = 4096;
+    for (size_t off = 0; off < size; off += 16) {
+        int n = snprintf(line, sizeof(line), "\t\t\t%08X", (unsigned)off);
+        for (size_t i = 0; i < 16; i++) {
+            if (off + i < size) {
+                unsigned char c = b[off + i];
+                if (!(i % 4))
+                    n += snprintf(line + n, sizeof(line) - n, " ");
+                n += snprintf(line + n, sizeof(line) - n, " %02x", c);
+                alpha[i] = (isprint(c) && c < 0xA0) ? (char)c : '.';
+            } else {
+                /* libwrap pads short lines without group separators */
+                n += snprintf(line + n, sizeof(line) - n, "   ");
+                alpha[i] = '.';
+            }
+        }
+        alpha[16] = 0;
+        logf_("%s\t|%s|\n", line, alpha);
+    }
+}
+
+static void log_hexdump_dwords(const uint32_t *d, uint32_t ndw)
+{
+    if (g_log < 0 || !d)
+        return;
+    char line[160];
+    if (ndw > (1u << 16))
+        ndw = 1u << 16;
+    for (uint32_t i = 0; i < ndw; i += 8) {
+        int n = snprintf(line, sizeof(line), "\t\t\t%08X:   ", i * 4);
+        for (uint32_t k = i; k < i + 8 && k < ndw; k++)
+            n += snprintf(line + n, sizeof(line) - n, " %08x", d[k]);
         logf_("%s\n", line);
     }
 }
 
-static void log_ioctl(int fd, unsigned req, int ret, int post)
+static void log_ioctl(int fd, unsigned req, void *arg, int ret, int post)
 {
     if (g_log < 0)
         return;
     const char *nm = ioctl_name(_IOC_NR(req));
-    char tmp[32];
+    char tmp[40];
     if (!nm) {
-        snprintf(tmp, sizeof(tmp), "KGSL_IOCTL_0x%02x", _IOC_NR(req));
+        snprintf(tmp, sizeof(tmp), "<unknown nr 0x%02x>", _IOC_NR(req));
         nm = tmp;
     }
+    unsigned long r = (unsigned long)(long)(int)req;
     if (post)
-        logf_("< [%4d]  kgsl-3d: %s (%08x) => %d\n", fd, nm, req, ret);
+        logf_("< [%4d] %8s: %s (%08lx) => %d\n", fd, "kgsl-3d", nm, r, ret);
     else
-        logf_("> [%4d]  kgsl-3d: %s (%08x)\n", fd, nm, req);
+        logf_("> [%4d] %8s: %s (%08lx)\n", fd, "kgsl-3d", nm, r);
+    if (arg && (_IOC_DIR(req) & (post ? _IOC_READ : _IOC_WRITE)))
+        log_hexdump(arg, _IOC_SIZE(req));
 }
 
+/* ---- capture file ---- */
 static void finish(void)
 {
     pthread_mutex_lock(&g_lock);
@@ -215,41 +279,15 @@ static void finish(void)
         gzclose(g_gz);
         g_gz = NULL;
     }
-    logf_("dlrec: done, %lu submits\n", g_submits);
     pthread_mutex_unlock(&g_lock);
-}
-
-static int enabled(void)
-{
-    if (g_enabled >= 0)
-        return g_enabled;
-    const char *path = getenv("DLREC_PATH");
-    const char *cap = getenv("DLREC_BUF_CAP");
-    const char *log = getenv("DLREC_LOG");
-    g_cap = cap ? strtoull(cap, NULL, 0) : 0;
-    if (log && *log)
-        g_log = open(log, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
-    g_enabled = 0;
-    if (path && *path) {
-        int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
-        if (fd >= 0) {
-            g_gz = gzdopen(fd, "wb1");
-            if (g_gz) {
-                g_enabled = 1;
-                atexit(finish);
-            } else {
-                close(fd);
-            }
-        }
-        logf_("dlrec: output %s -> %s\n", path, g_enabled ? "ok" : strerror(errno));
-    }
-    return g_enabled;
 }
 
 static void sect(uint32_t type, const void *data, uint32_t size)
 {
     static const uint32_t marker[2] = { 0xffffffffu, 0xffffffffu };
     static const uint8_t pad[4];
+    if (!g_gz)
+        return;
     uint32_t hdr[2] = { type, (size + 3u) & ~3u };
     gzwrite(g_gz, marker, sizeof(marker));
     gzwrite(g_gz, hdr, sizeof(hdr));
@@ -261,9 +299,9 @@ static void sect(uint32_t type, const void *data, uint32_t size)
 
 static void write_header(void)
 {
-    if (g_header_written || !g_chip_id)
+    if (g_header_written || !g_chip_id || !g_gz)
         return;
-    char cmd[256] = "deqp";
+    char cmd[256] = "test";
     int f = open("/proc/self/cmdline", O_RDONLY | O_CLOEXEC);
     if (f >= 0) {
         ssize_t n = read(f, cmd, sizeof(cmd) - 1);
@@ -282,54 +320,115 @@ static void write_header(void)
     g_header_written = 1;
 }
 
-/* The CTS prints progress with stdio but never flushes it, so through a pipe
- * its "Test case ..." lines arrive in blocks. DriverLab preloads this library
- * into every CTS run (recording or not) to make stdout line-buffered. */
+/* Set up in the library constructor: libc (and malloc) are ready by then, and
+ * nothing here may run from inside mmap() during allocator start-up. */
 __attribute__((constructor))
-static void dlrec_line_buffered_stdout(void)
+static void dlrec_init(void)
 {
+    /* The CTS prints progress with stdio but never flushes it. */
     setvbuf(stdout, NULL, _IOLBF, 0);
+
+    const char *log = getenv("DLREC_LOG");
+    if (log && *log) {
+        if (strcmp(log, "-") == 0)
+            g_log = 1;
+        else
+            g_log = open(log, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+    }
+    const char *cap = getenv("DLREC_BUF_CAP");
+    g_cap = cap ? strtoull(cap, NULL, 0) : 0;
+    const char *path = getenv("DLREC_PATH");
+    if (path && *path) {
+        int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+        if (fd >= 0) {
+            g_gz = gzdopen(fd, "wb1");
+            if (g_gz) {
+                g_enabled = 1;
+                atexit(finish);
+                logf_("opened rd, %d\n", fd);
+            } else {
+                close(fd);
+            }
+        }
+    }
+}
+
+/* ---- freedreno test hooks (declared weak in the tests) ---- */
+__attribute__((visibility("default")))
+void rd_start(const char *name, const char *fmt, ...)
+{
+    char buf[512];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt ? fmt : "", ap);
+    va_end(ap);
+    pthread_mutex_lock(&g_lock);
+    logf_("rd_start: %s: %s\n", name ? name : "", buf);
+    if (g_enabled) {
+        char t[600];
+        snprintf(t, sizeof(t), "%s: %s", name ? name : "", buf);
+        sect(RD_TEST, t, strlen(t) + 1);
+    }
+    pthread_mutex_unlock(&g_lock);
+}
+
+__attribute__((visibility("default")))
+void rd_end(void)
+{
+    pthread_mutex_lock(&g_lock);
+    if (g_gz)
+        gzflush(g_gz, Z_SYNC_FLUSH);
+    pthread_mutex_unlock(&g_lock);
+}
+
+__attribute__((visibility("default")))
+void rd_write_section(enum rd_sect_type type, const void *buf, int sz)
+{
+    if (sz < 0)
+        return;
+    pthread_mutex_lock(&g_lock);
+    if (g_enabled)
+        sect(type, buf, (uint32_t)sz);
+    pthread_mutex_unlock(&g_lock);
+}
+
+/* ---- fd classification ---- */
+static int fd_path(int fd, char *out, size_t len)
+{
+    char path[64];
+    snprintf(path, sizeof(path), "/proc/self/fd/%d", fd);
+    ssize_t n = readlink(path, out, len - 1);
+    if (n <= 0)
+        return 0;
+    out[n] = 0;
+    return 1;
 }
 
 /* Only "is kgsl" is cached, and it is re-checked before use in mmap(),
  * because fds are closed through paths this library does not see. */
-static int fd_is_kgsl_now(int fd)
-{
-    char path[64], target[128];
-    snprintf(path, sizeof(path), "/proc/self/fd/%d", fd);
-    ssize_t n = readlink(path, target, sizeof(target) - 1);
-    if (n <= 0)
-        return 0;
-    target[n] = 0;
-    return strncmp(target, "/dev/kgsl-3d", 12) == 0;
-}
-
 static int is_kgsl_fd(int fd, int may_probe)
 {
     if (fd < 0 || fd >= (int)sizeof(g_kgsl_fd))
         return 0;
+    char target[128];
     if (g_kgsl_fd[fd]) {
         if (may_probe)
             return 1;
-        if (fd_is_kgsl_now(fd))
+        if (fd_path(fd, target, sizeof(target)) && strncmp(target, "/dev/kgsl-3d", 12) == 0)
             return 1;
         g_kgsl_fd[fd] = 0;
         return 0;
     }
-    if (!may_probe)
+    if (!may_probe || !fd_path(fd, target, sizeof(target)))
         return 0;
-    char path[64], target[128];
-    snprintf(path, sizeof(path), "/proc/self/fd/%d", fd);
-    ssize_t n = readlink(path, target, sizeof(target) - 1);
-    if (n <= 0)
-        return 0;
-    target[n] = 0;
     if (strncmp(target, "/dev/kgsl-3d", 12) != 0)
         return 0;
     g_kgsl_fd[fd] = 1;
+    logf_("found kgsl_3d0: %d\n", fd);
     return 1;
 }
 
+/* ---- buffer tracking ---- */
 static struct bo *bo_find_id(uint32_t id)
 {
     for (struct bo *b = g_bos; b; b = b->next)
@@ -380,15 +479,43 @@ static void bo_resolve_addr(struct bo *b)
 
 static void dump_submit(struct kgsl_gpu_command *c)
 {
+    logf_("\t\tdrawctxt_id:\t%08x\n", c->context_id);
+    logf_("\t\tflags:\t\t%08x %08x\n", (uint32_t)(c->flags >> 32), (uint32_t)c->flags);
+    logf_("\t\tnumcmds:\t\t%08x\n", c->numcmds);
     if (!c->cmdlist || !c->numcmds || c->cmdsize < sizeof(struct kgsl_command_object))
         return;
-    write_header();
+    if (!g_enabled && g_log < 0)
+        return;
+    const uint8_t *list = (const uint8_t *)(uintptr_t)c->cmdlist;
 
     for (struct bo *b = g_bos; b; b = b->next)
         bo_resolve_addr(b);
 
+    for (uint32_t i = 0; i < c->numcmds; i++) {
+        const struct kgsl_command_object *o = (const void *)(list + (size_t)i * c->cmdsize);
+        logf_("\t\tcmd[%u].flags:\t\t%08x\n", i, o->flags);
+        logf_("\t\tcmd[%u].sizedwords:\t%08x\n", i, (uint32_t)(o->size / 4));
+        logf_("\t\tcmd[%u].gpuaddr:\t%08llx\n", i, (unsigned long long)o->gpuaddr);
+        if (g_log < 0)
+            continue;
+        for (struct bo *b = g_bos; b; b = b->next) {
+            if (b->host && b->gpuaddr && o->gpuaddr >= b->gpuaddr && o->gpuaddr < b->gpuaddr + b->size) {
+                uint64_t off = o->gpuaddr - b->gpuaddr;
+                uint32_t ndw = (uint32_t)(o->size / 4);
+                if (off + (uint64_t)ndw * 4 <= b->host_len) {
+                    logf_("\t\tcmd: (%u dwords)\n", ndw);
+                    log_hexdump_dwords((const uint32_t *)((const uint8_t *)b->host + off), ndw);
+                }
+                break;
+            }
+        }
+    }
+
+    if (!g_enabled)
+        return;
+    write_header();
+
     /* Buffers that hold this submit's command streams are always written. */
-    const uint8_t *list = (const uint8_t *)(uintptr_t)c->cmdlist;
     for (struct bo *b = g_bos; b; b = b->next) {
         if (!b->host || !b->gpuaddr)
             continue;
@@ -411,26 +538,23 @@ static void dump_submit(struct kgsl_gpu_command *c)
         sect(RD_CMDSTREAM_ADDR, addr, sizeof(addr));
     }
     gzflush(g_gz, Z_SYNC_FLUSH);
-    g_submits++;
-    logf_("\t\tsubmit %lu: drawctxt_id %u, numcmds %u\n", g_submits, c->context_id, c->numcmds);
-    for (uint32_t i = 0; i < c->numcmds; i++) {
-        const struct kgsl_command_object *o = (const void *)(list + (size_t)i * c->cmdsize);
-        logf_("\t\tcmd[%u]: gpuaddr 0x%llx, %llu dwords, flags 0x%x\n", i,
-              (unsigned long long)o->gpuaddr, (unsigned long long)(o->size / 4), o->flags);
-    }
 }
 
-static void on_mmap(void *ret, size_t len, int fd, off_t off)
+static void on_mmap(void *ret, size_t len, int prot, int flags, int fd, off_t off)
 {
-    if (ret == MAP_FAILED || !is_kgsl_fd(fd, 0))
+    if (!is_kgsl_fd(fd, 0))
         return;
     struct bo *b = bo_find_id((uint32_t)(off >> 12));
-    if (b) {
+    logf_("< [%4d]         : mmap64: addr=%p, length=%u, prot=%x, flags=%x, offset=%08lx\n",
+          fd, (void *)0, (unsigned)len, prot, flags, (unsigned long)off);
+    logf_("< [%4d]         : mmap64: -> (%p), buf=%p\n", fd, ret, (void *)b);
+    if (ret != MAP_FAILED && b) {
         b->host = ret;
         b->host_len = len;
     }
 }
 
+/* ---- wrapped functions ---- */
 __attribute__((visibility("default")))
 int ioctl(int fd, int request, ...)
 {
@@ -440,67 +564,111 @@ int ioctl(int fd, int request, ...)
     va_end(ap);
 
     unsigned req = (unsigned)request;
-    if (_IOC_TYPE(req) != KGSL_IOC_TYPE || !enabled())
+    if (!g_enabled && g_log < 0)
         return real_ioctl(fd, req, arg);
 
     pthread_mutex_lock(&g_lock);
-    int kgsl = is_kgsl_fd(fd, 1);
-    if (kgsl)
-        log_ioctl(fd, req, 0, 0);
-    if (kgsl && req == IOCTL_KGSL_GPU_COMMAND && arg)
-        dump_submit(arg);
+    int kgsl = _IOC_TYPE(req) == KGSL_IOC_TYPE && is_kgsl_fd(fd, 1);
+    if (!kgsl) {
+        if (g_log >= 0) {
+            char target[128];
+            if (fd_path(fd, target, sizeof(target)) && strstr(target, "/dev/"))
+                logf_("#### missing device, path: %s: %d\n", target, fd);
+            logf_("> [%4d]         : <unknown> (%08lx)\n", fd, (unsigned long)(long)(int)req);
+        }
+        pthread_mutex_unlock(&g_lock);
+        int r = real_ioctl(fd, req, arg);
+        if (g_log >= 0)
+            logf_("< [%4d]         : <unknown> (%08lx) (%d)\n", fd, (unsigned long)(long)(int)req, r);
+        return r;
+    }
+
+    log_ioctl(fd, req, arg, 0, 0);
+    if (arg) {
+        switch (req) {
+        case IOCTL_KGSL_GPU_COMMAND:
+            dump_submit(arg);
+            break;
+        case IOCTL_KGSL_GPUOBJ_ALLOC: {
+            struct kgsl_gpuobj_alloc *p = arg;
+            logf_("\t\tflags:\t\t%08x %08x\n", (uint32_t)(p->flags >> 32), (uint32_t)p->flags);
+            logf_("\t\tsize:\t\t%08x\n", (uint32_t)p->size);
+            break;
+        }
+        case IOCTL_KGSL_GPUOBJ_INFO:
+            logf_("\t\tid:\t%u\n", ((struct kgsl_gpuobj_info *)arg)->id);
+            break;
+        case IOCTL_KGSL_GPUOBJ_FREE:
+            logf_("\t\tid:\t%u\n", ((struct kgsl_gpuobj_free *)arg)->id);
+            break;
+        case IOCTL_KGSL_DRAWCTXT_CREATE:
+            logf_("\t\tflags:\t\t%08x\n", ((struct kgsl_drawctxt_create *)arg)->flags);
+            break;
+        default:
+            break;
+        }
+    }
     pthread_mutex_unlock(&g_lock);
 
     int ret = real_ioctl(fd, req, arg);
-    if (!kgsl)
-        return ret;
-    pthread_mutex_lock(&g_lock);
-    log_ioctl(fd, req, ret, 1);
-    pthread_mutex_unlock(&g_lock);
-    if (ret != 0 || !arg)
-        return ret;
 
     pthread_mutex_lock(&g_lock);
-    switch (req) {
-    case IOCTL_KGSL_DEVICE_GETPROPERTY: {
-        struct kgsl_device_getproperty *p = arg;
-        logf_("\t\ttype:\t\t%08x (%s)\n", p->type, prop_name(p->type));
-        if (p->value && p->sizebytes)
-            log_hex(p->value, p->sizebytes);
-        if (p->type == KGSL_PROP_DEVICE_INFO && p->value && p->sizebytes >= sizeof(struct kgsl_devinfo)) {
-            struct kgsl_devinfo *d = p->value;
-            g_chip_id = d->chip_id;
-            g_gpu_id = d->gpu_id;
-            logf_("\t\tgpu_id: %u\n\t\tchip_id: 0x%08x\n\t\tgmem_sizebytes: 0x%zx\n",
-                  d->gpu_id, d->chip_id, d->gmem_sizebytes);
+    log_ioctl(fd, req, arg, ret, 1);
+    if (ret == 0 && arg) {
+        switch (req) {
+        case IOCTL_KGSL_DEVICE_GETPROPERTY: {
+            struct kgsl_device_getproperty *p = arg;
+            logf_("\t\ttype:\t\t%08x (%s)\n", p->type, prop_name(p->type));
+            if (p->type == KGSL_PROP_DEVICE_INFO && p->value && p->sizebytes >= sizeof(struct kgsl_devinfo)) {
+                struct kgsl_devinfo *d = p->value;
+                uint32_t gpu_id = d->gpu_id;
+                if (!gpu_id)
+                    gpu_id = ((d->chip_id >> 24) & 0xff) * 100 + ((d->chip_id >> 16) & 0xff) * 10 +
+                             ((d->chip_id >> 8) & 0xff);
+                g_chip_id = d->chip_id;
+                g_gpu_id = gpu_id;
+                logf_("\t\tgpu_id: %u\n", gpu_id);
+                logf_("\t\tgmem_sizebytes: 0x%x\n", (uint32_t)d->gmem_sizebytes);
+            }
+            if (p->value && p->sizebytes)
+                log_hexdump(p->value, p->sizebytes);
+            break;
         }
-        break;
-    }
-    case IOCTL_KGSL_GPUOBJ_ALLOC: {
-        struct kgsl_gpuobj_alloc *p = arg;
-        bo_add(fd, p->id, p->size, 0);
-        break;
-    }
-    case IOCTL_KGSL_GPUMEM_ALLOC_ID: {
-        struct kgsl_gpumem_alloc_id *p = arg;
-        bo_add(fd, p->id, p->size, p->gpuaddr);
-        break;
-    }
-    case IOCTL_KGSL_GPUOBJ_INFO: {
-        struct kgsl_gpuobj_info *p = arg;
-        struct bo *b = bo_find_id(p->id);
-        if (b && p->gpuaddr)
-            b->gpuaddr = p->gpuaddr;
-        break;
-    }
-    case IOCTL_KGSL_GPUOBJ_FREE:
-        bo_remove(((struct kgsl_gpuobj_free *)arg)->id);
-        break;
-    case IOCTL_KGSL_GPUMEM_FREE_ID:
-        bo_remove(((struct kgsl_gpumem_free_id *)arg)->id);
-        break;
-    default:
-        break;
+        case IOCTL_KGSL_GPUOBJ_ALLOC: {
+            struct kgsl_gpuobj_alloc *p = arg;
+            logf_("\t\tid:\t%u\n", p->id);
+            bo_add(fd, p->id, p->size, 0);
+            break;
+        }
+        case IOCTL_KGSL_GPUMEM_ALLOC_ID: {
+            struct kgsl_gpumem_alloc_id *p = arg;
+            logf_("\t\tid:\t%u\n\t\tgpuaddr:\t%08lx\n", p->id, p->gpuaddr);
+            bo_add(fd, p->id, p->size, p->gpuaddr);
+            break;
+        }
+        case IOCTL_KGSL_GPUOBJ_INFO: {
+            struct kgsl_gpuobj_info *p = arg;
+            struct bo *b = bo_find_id(p->id);
+            if (b && p->gpuaddr)
+                b->gpuaddr = p->gpuaddr;
+            logf_("\t\tid:\t%u\n\t\tgpuaddr:\t%08llx\n", p->id, (unsigned long long)p->gpuaddr);
+            break;
+        }
+        case IOCTL_KGSL_GPUOBJ_FREE:
+            bo_remove(((struct kgsl_gpuobj_free *)arg)->id);
+            break;
+        case IOCTL_KGSL_GPUMEM_FREE_ID:
+            bo_remove(((struct kgsl_gpumem_free_id *)arg)->id);
+            break;
+        case IOCTL_KGSL_DRAWCTXT_CREATE:
+            logf_("\t\tdrawctxt_id:\t%08x\n", ((struct kgsl_drawctxt_create *)arg)->drawctxt_id);
+            break;
+        case IOCTL_KGSL_GPU_COMMAND:
+            logf_("\t\ttimestamp:\t%08x\n", ((struct kgsl_gpu_command *)arg)->timestamp);
+            break;
+        default:
+            break;
+        }
     }
     pthread_mutex_unlock(&g_lock);
     return ret;
@@ -510,12 +678,9 @@ __attribute__((visibility("default")))
 void *mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off)
 {
     void *ret = real_mmap(addr, len, prot, flags, fd, off);
-    /* Never initialise from mmap(): the allocator calls mmap() while it sets
-     * itself up, and malloc() from there hands out untagged pointers that
-     * abort at free(). The first KGSL ioctl always comes before any KGSL mmap. */
-    if (fd >= 0 && g_enabled == 1) {
+    if (fd >= 0 && (g_enabled || g_log >= 0)) {
         pthread_mutex_lock(&g_lock);
-        on_mmap(ret, len, fd, off);
+        on_mmap(ret, len, prot, flags, fd, off);
         pthread_mutex_unlock(&g_lock);
     }
     return ret;
@@ -524,22 +689,13 @@ void *mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off)
 __attribute__((visibility("default")))
 void *mmap64(void *addr, size_t len, int prot, int flags, int fd, off64_t off)
 {
-    void *ret = real_mmap(addr, len, prot, flags, fd, (off_t)off);
-    /* Never initialise from mmap(): the allocator calls mmap() while it sets
-     * itself up, and malloc() from there hands out untagged pointers that
-     * abort at free(). The first KGSL ioctl always comes before any KGSL mmap. */
-    if (fd >= 0 && g_enabled == 1) {
-        pthread_mutex_lock(&g_lock);
-        on_mmap(ret, len, fd, off);
-        pthread_mutex_unlock(&g_lock);
-    }
-    return ret;
+    return mmap(addr, len, prot, flags, fd, (off_t)off);
 }
 
 __attribute__((visibility("default")))
 int munmap(void *addr, size_t len)
 {
-    if (g_enabled == 1) {
+    if (g_enabled || g_log >= 0) {
         pthread_mutex_lock(&g_lock);
         for (struct bo *b = g_bos; b; b = b->next) {
             if (b->host && (uint8_t *)b->host >= (uint8_t *)addr &&

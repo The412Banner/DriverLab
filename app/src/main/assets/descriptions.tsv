@@ -1,0 +1,138 @@
+# path	explanation (shown by the (i) buttons; the nearest described parent explains anything not listed)
+dEQP-VK	The official Vulkan conformance tests (Khronos CTS). Every Vulkan driver is supposed to pass them. Each test checks one small thing and reports Pass, Fail, Not supported (the driver does not offer that feature, which is fine) or Crash.
+dEQP-VK.api	The core Vulkan API: creating devices, buffers, images and pipelines, copies and blits, clears, limits and error handling. Most of the basic driver plumbing is tested here.
+dEQP-VK.api.smoke	A handful of quick sanity checks: create a device, a sampler and a shader, draw a triangle and run a compute shader. If these fail, little else will work.
+dEQP-VK.api.copy_and_blit	Copying and scaling data between buffers and images (vkCmdCopy*, vkCmdBlitImage, resolves), in many formats and sizes.
+dEQP-VK.api.image_clearing	Clearing images and attachments to colours, depth and stencil values.
+dEQP-VK.api.info	Checks that the driver answers basic questions (versions, properties) consistently.
+dEQP-VK.binding_model	How shaders find their resources: descriptor sets, push descriptors, buffer device addresses and descriptor buffers. Translation layers like DXVK and VKD3D rely on this heavily.
+dEQP-VK.clipping	Cutting geometry at the screen edges and at user clip/cull planes, and depth clamping.
+dEQP-VK.compute	Compute shaders: dispatches, shared memory, barriers and workgroup sizes.
+dEQP-VK.compute.pipeline.basic	Basic compute shader programs: sums, copies, barriers and shared variables. Quick and broad.
+dEQP-VK.conditional_rendering	Skipping draws and dispatches depending on a value in GPU memory (VK_EXT_conditional_rendering).
+dEQP-VK.cooperative_vector	Vector-times-matrix maths for machine-learning style shaders (VK_NV_cooperative_vector). Usually not supported on phones.
+dEQP-VK.data_graph	Graph pipelines for neural-network work (VK_ARM_data_graph). Usually not supported on phones.
+dEQP-VK.depth	Depth buffer formats and depth range handling.
+dEQP-VK.descriptor_indexing	Large, partly filled and dynamically indexed descriptor arrays ("bindless" resources, used by DXVK and VKD3D).
+dEQP-VK.device_group	Using several GPUs as one device. Phones have one GPU, so most of these report Not supported.
+dEQP-VK.dgc	Device-generated commands: the GPU writes its own draw and dispatch commands.
+dEQP-VK.draw	Drawing: indexed and indirect draws, instancing, base vertex/instance and simple render passes. Good basic coverage of the 3D pipeline.
+dEQP-VK.draw.renderpass	Draw tests inside classic render passes.
+dEQP-VK.draw.renderpass.basic_draw	Plain draws of triangles, strips and fans with different vertex counts.
+dEQP-VK.draw.dynamic_rendering	The same draw tests using dynamic rendering instead of render pass objects.
+dEQP-VK.drm_format_modifiers	Image memory layouts shared with the display system (DRM format modifiers).
+dEQP-VK.dynamic_state	Pipeline settings that are changed while recording commands instead of being baked into the pipeline.
+dEQP-VK.fragment_operations	Per-pixel operations: early depth tests, scissor, occlusion and sample masks.
+dEQP-VK.fragment_shader_interlock	Ordered access to the same pixel from several fragment shader invocations.
+dEQP-VK.fragment_shading_barycentric	Reading barycentric (triangle position) values in fragment shaders.
+dEQP-VK.fragment_shading_rate	Variable rate shading: shading a group of pixels at once to save GPU work.
+dEQP-VK.geometry	Geometry shaders: emitting primitives, layered rendering and primitive IDs.
+dEQP-VK.glsl	Shader language features: loops, functions, built-in variables, atomics, operators and precision. Mostly tests the shader compiler.
+dEQP-VK.graphicsfuzz	Shaders found by fuzzing that crashed or were miscompiled by real drivers. Good at finding shader compiler bugs.
+dEQP-VK.image	Images: load/store from shaders, formats, sizes, mip levels, swizzles, compression and host copies.
+dEQP-VK.image_processing	Qualcomm image-processing instructions (VK_QCOM_image_processing).
+dEQP-VK.imageless_framebuffer	Framebuffers created without images attached up front.
+dEQP-VK.info	Not real tests: they write what the driver reports (properties, features, limits, formats, extensions) into the log. Useful to compare two drivers side by side.
+dEQP-VK.memory	Allocating, mapping and binding GPU memory, memory requirements and external memory.
+dEQP-VK.memory_model	The Vulkan memory model: when writes from one shader invocation become visible to others.
+dEQP-VK.mesh_shader	Mesh and task shaders, the modern replacement for the vertex/geometry stages.
+dEQP-VK.multiview	Rendering several views (for example left and right eye) in one pass.
+dEQP-VK.pipeline	Graphics pipeline state in many combinations: blending, depth/stencil, vertex input, multisampling, push constants, specialization constants and pipeline libraries. The biggest group, over a million tests.
+dEQP-VK.pipeline.monolithic	Pipeline tests using ordinary (monolithic) pipelines.
+dEQP-VK.postmortem	What happens after the GPU hits a fault or the device is lost.
+dEQP-VK.protected_memory	Protected memory for DRM video. Usually not supported.
+dEQP-VK.query_pool	Queries: occlusion counts, timestamps, pipeline statistics and transform feedback queries.
+dEQP-VK.rasterization	Turning triangles, lines and points into pixels: coverage rules, line styles, multisampling, provoking vertex, depth bias.
+dEQP-VK.ray_query	Ray queries from shaders (hardware ray tracing). The Adreno 722 has no ray tracing, so these report Not supported.
+dEQP-VK.ray_tracing_pipeline	Ray tracing pipelines. Not supported on the Adreno 722.
+dEQP-VK.reconvergence	How shader threads come back together after branches.
+dEQP-VK.renderpasses	Render passes and dynamic rendering: attachments, load/store operations, subpasses, resolves and MSAA. Important for tiled GPUs like Adreno, where the driver chooses between GMEM (tile memory) and sysmem rendering.
+dEQP-VK.renderpasses.renderpass1	Render pass tests with the original render pass API.
+dEQP-VK.renderpasses.renderpass2	The same with the newer render pass 2 API.
+dEQP-VK.renderpasses.dynamic_rendering	The same with dynamic rendering (no render pass objects).
+dEQP-VK.robustness	Out-of-range reads and writes must be safe: no crashes and no leaked data.
+dEQP-VK.shader_abort	Aborting shaders on purpose (VK_KHR_shader_abort).
+dEQP-VK.shader_object	Shader objects (VK_EXT_shader_object), an alternative to pipelines; repeats many pipeline tests.
+dEQP-VK.sparse_resources	Sparse binding and residency: textures and buffers that are only partly backed by memory.
+dEQP-VK.spirv_assembly	Hand-written SPIR-V shaders: tests the shader compiler on single instructions and edge cases.
+dEQP-VK.ssbo	Shader storage buffers: data layouts and access from shaders.
+dEQP-VK.subgroups	Subgroup (wave) operations: ballot, shuffle and arithmetic across neighbouring shader threads.
+dEQP-VK.synchronization	Barriers, semaphores, fences, events and timeline semaphores (original API).
+dEQP-VK.synchronization2	The same synchronization coverage with the newer synchronization2 API.
+dEQP-VK.tensor	Tensor resources for machine learning (VK_ARM_tensors). Usually not supported.
+dEQP-VK.tessellation	Tessellation shaders: patch sizes, spacing, winding and primitive generation.
+dEQP-VK.texture	Texture sampling: filtering, mip levels, wrap modes, compressed formats and shadow compare.
+dEQP-VK.transform_feedback	Capturing vertex shader output into buffers (used by games and by DXVK for Direct3D stream output).
+dEQP-VK.ubo	Uniform buffers: data layouts and access patterns.
+dEQP-VK.video	Vulkan Video decode and encode. Turned off in this build.
+dEQP-VK.wsi	Window system integration: swapchains and presenting to the screen. Not supported in DriverLab's off-screen test mode.
+dEQP-VK.ycbcr	YCbCr (video) image formats and colour conversion in samplers.
+fd-gles	OpenGL ES test programs from the freedreno project (Rob Clark), as used by the adreno-cmdstream-gather app, plus two by DriverLab. Each one draws or computes something with the phone's own OpenGL ES driver so its GPU commands can be recorded and compared. They run on the system driver only. Pass = the program finished without an error.
+fd-gles.test-advanced-blend	Advanced blend modes (multiply, screen, overlay and so on, KHR_blend_equation_advanced), with multisampling.
+fd-gles.test-bandwidth	Large draws into textures to stress memory bandwidth.
+fd-gles.test-blend-fbo	Blending into offscreen framebuffers with several render targets and colour formats.
+fd-gles.test-caps	Prints what the OpenGL ES driver supports (version, extensions, configs).
+fd-gles.test-cat	A simple program that copies data through a shader (buffer and uniform setup).
+fd-gles.test-clear	Clears the screen with different colours, depth and stencil values.
+fd-gles.test-clear-fbo	Clears offscreen framebuffers of different sizes and formats.
+fd-gles.test-compiler	Compiles and runs a compute shader to look at the shader compiler's output.
+fd-gles.test-composite	2D blitter (C2D) composite test. Needs Qualcomm's libC2D2.so, which current phones do not ship, so it fails right away (the same happens in the original app).
+fd-gles.test-composite2	2D blitter (C2D) composite with blend modes. Needs libC2D2.so (missing on current phones).
+fd-gles.test-compute	Compute shaders with different workgroup sizes and IDs.
+fd-gles.test-copy	2D blitter (C2D) copy between formats. Needs libC2D2.so (missing on current phones).
+fd-gles.test-cube	Draws a rotating cube.
+fd-gles.test-cube-textured	Draws a textured cube with different texture filters.
+fd-gles.test-cubemap	Samples cube map textures of different sizes and formats.
+fd-gles.test-draw	Draws with every primitive type (points, lines, line loops, strips, triangles, fans).
+fd-gles.test-draw-indirect	Draws whose parameters come from a GPU buffer (indirect draws).
+fd-gles.test-enable-disable	Turns pipeline states on and off (blend, depth, polygon offset, culling) between draws.
+fd-gles.test-es2gears	The classic "gears" demo scene.
+fd-gles.test-fb	2D blitter (C2D) framebuffer test. Needs libC2D2.so (missing on current phones).
+fd-gles.test-fill	2D blitter (C2D) solid fills. Needs libC2D2.so (missing on current phones).
+fd-gles.test-fill2	2D blitter (C2D) fills of partial areas. Needs libC2D2.so (missing on current phones).
+fd-gles.test-float-int	Integer and float vertex attributes and texture formats.
+fd-gles.test-frag-depth	A fragment shader that writes its own depth value.
+fd-gles.test-image	Image load/store and image atomics from shaders.
+fd-gles.test-instanced	Instanced drawing with per-instance attribute divisors.
+fd-gles.test-int-varyings	Passing integer values from the vertex to the fragment shader.
+fd-gles.test-layout-2d-array	Uploads 2D array textures in many sizes and formats; used to work out how the GPU lays textures out in memory.
+fd-gles.test-limits	Reads the driver's limits (maximum sizes, counts) and context options.
+fd-gles.test-lrz	Low-resolution Z (LRZ), Adreno's early depth rejection, with different depth, stencil and blend settings.
+fd-gles.test-mip-fbo	Rendering into individual mip levels of a texture.
+fd-gles.test-mipmap	Sampling mipmapped textures with different level-of-detail limits.
+fd-gles.test-mrt-fbo	Rendering into several colour targets at once (MRT), with masks and depth/stencil.
+fd-gles.test-msaa	Multisampled rendering and resolves in different formats and sample counts.
+fd-gles.test-multi	2D blitter (C2D) with several surfaces. Needs libC2D2.so (missing on current phones).
+fd-gles.test-noattach-fbo	Framebuffers with no attachments (only side effects such as queries).
+fd-gles.test-ovr-multiview	Written for DriverLab: draws once into the two layers of a texture array with GL_OVR_multiview and checks that layer 0 is red and layer 1 blue.
+fd-gles.test-perf	Reads GPU performance counters through GL_AMD_performance_monitor.
+fd-gles.test-piglit-bad	A shader pattern from the piglit test suite that some drivers got wrong.
+fd-gles.test-piglit-good	The working variant of the piglit-bad shader, for comparison.
+fd-gles.test-quad-attributeless	Draws a quad without any vertex attributes (positions made in the shader).
+fd-gles.test-quad-flat	Draws a flat-coloured quad.
+fd-gles.test-quad-flat-fbo	Draws a flat quad into offscreen framebuffers of different formats.
+fd-gles.test-quad-flat2	Draws flat quads at several window sizes.
+fd-gles.test-quad-textured	Draws a textured quad, including shadow-compare sampling.
+fd-gles.test-quad-textured-3d	Draws with 3D textures of different types and sizes.
+fd-gles.test-quad-textured2	Draws textured quads with many texture sizes and formats.
+fd-gles.test-query	Occlusion and other queries.
+fd-gles.test-replay	2D blitter (C2D) command replay. Needs libC2D2.so (missing on current phones).
+fd-gles.test-restore-resolve	Rendering that forces the driver to restore and resolve tile (GMEM) contents between passes.
+fd-gles.test-sampshad	Per-sample shading and sample masks with multisampling.
+fd-gles.test-shader-size	Shaders of growing size, to see how the driver handles large programs.
+fd-gles.test-srgb-fbo	Rendering into sRGB framebuffers.
+fd-gles.test-ssbo	Shader storage buffers of different sizes.
+fd-gles.test-stencil	Stencil buffer tests and operations.
+fd-gles.test-strip-smoothed	Triangle strips with colour interpolated across them.
+fd-gles.test-tex	Many textures in the vertex and fragment shaders, with border colours.
+fd-gles.test-tex-fbo	Render to a texture, then sample it, in different formats and sample counts.
+fd-gles.test-tex-layout	Checks texture memory layout parameters.
+fd-gles.test-tex-msaa	Multisampled textures (texelFetch from MSAA textures).
+fd-gles.test-texturator	Written for DriverLab: uploads a known pattern to 2D (every mip level), 2D array and 3D textures in nine formats and checks every texel. The original app's version only printed its usage text.
+fd-gles.test-tf	Transform feedback (capturing vertex shader output into buffers).
+fd-gles.test-triangle-quad	A triangle and a quad with different sample counts and depth/stencil buffers.
+fd-gles.test-triangle-smoothed	A single triangle with colours blended across it.
+fd-gles.test-ubwc	Rendering to and sampling from UBWC-compressed images (Adreno's bandwidth compression).
+fd-gles.test-ubwc2d	2D blitter (C2D) copies with UBWC compression. Needs libC2D2.so (missing on current phones).
+fd-gles.test-varyings	Many values passed from the vertex to the fragment shader.
+fd-gles.test-vertex	Vertex attributes of different sizes and types.

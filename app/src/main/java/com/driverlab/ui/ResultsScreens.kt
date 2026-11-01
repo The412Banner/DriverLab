@@ -310,7 +310,7 @@ fun TestDetailScreen(nav: NavHostController, id: String, name: String) {
     val result by produceState<TestResult?>(null, id, name) { value = findResult(id, name) }
     var tab by rememberSaveable { mutableStateOf(0) }
     val dir = AppGraph.sessions.dir(id)
-    val testLog = File(dir, "tests/${SessionStore.safeName(name)}.log")
+    val testLog = File(dir, "tests/${SessionStore.fileBase(name)}.log")
     val r = result
     val capture = r?.capture?.let { File(dir, it) }?.takeIf { it.exists() }
     Scaffold(topBar = {

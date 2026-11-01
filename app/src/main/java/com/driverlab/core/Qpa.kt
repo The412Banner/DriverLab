@@ -69,7 +69,7 @@ object Qpa {
         }
         if (drv.isNotEmpty()) {
             val v = drv.toLongOrNull()
-            if (v != null) drv = if (vendor == "0x5143" && deviceName.startsWith("Adreno")) "${Fmt.vkVersion(v)} (Qualcomm)" else Fmt.vkVersion(v)
+            if (v != null) drv = Fmt.driverVersion(v)
         }
         return ProbeInfo(
             ok = ok && deviceName.isNotEmpty(),

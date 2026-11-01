@@ -124,11 +124,10 @@ fun TestsScreen(nav: NavHostController) {
                 singleLine = true,
                 shape = RoundedCornerShape(14.dp),
             )
-            Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                for (p in catalog.presets) {
-                    FilterChip(selected = label == p.title, onClick = { scope.launch { AppGraph.selection.applyPreset(p) } }, label = { Text(p.title) })
-                }
-            }
+            PresetChips(
+                catalog.presets, label, { p -> scope.launch { AppGraph.selection.applyPreset(p) } },
+                Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            )
             HorizontalDivider()
             AnimatedContent(
                 targetState = if (query.trim().length >= 2) "?" + query.trim() else path,
@@ -138,7 +137,7 @@ fun TestsScreen(nav: NavHostController) {
             ) { target ->
                 when {
                     target.startsWith("?") -> SearchResults(target.drop(1), selection)
-                    target.isEmpty() -> TopList(catalog, selection) { path = "$ROOT.$it" }
+                    target.isEmpty() -> TopList(catalog, selection) { path = it }
                     else -> GroupList(target, selection, onOpen = { path = it }, onUp = { path = it })
                 }
             }
@@ -177,6 +176,7 @@ private fun NodeRow(name: String, sub: String, path: String, isLeaf: Boolean, te
                 maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (sub.isNotEmpty()) Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        ExplainButton(path, isLeaf, tests)
         if (!isLeaf) Icon(Icons.Filled.ChevronRight, "Open", tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
@@ -185,7 +185,11 @@ private fun NodeRow(name: String, sub: String, path: String, isLeaf: Boolean, te
 private fun TopList(catalog: Catalog, selection: Any, onOpen: (String) -> Unit) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         items(catalog.tops, key = { it.name }) { t ->
-            NodeRow(t.name, "${Fmt.count(t.tests.toLong())} tests", "$ROOT.${t.name}", false, t.tests, selection) { onOpen(t.name) }
+            if (t.isGles) {
+                NodeRow("OpenGL ES tests (freedreno)", "${Fmt.count(t.tests.toLong())} programs · system driver only", t.path, false, t.tests, selection) { onOpen(t.path) }
+            } else {
+                NodeRow(t.name, "${Fmt.count(t.tests.toLong())} tests", t.path, false, t.tests, selection) { onOpen(t.path) }
+            }
         }
     }
 }

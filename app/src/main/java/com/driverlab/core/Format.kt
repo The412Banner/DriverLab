@@ -42,6 +42,17 @@ object Fmt {
         return "$major.$minor.$patch"
     }
 
+    /**
+     * Driver version as drivers pack it: VK_MAKE_VERSION style, 10-bit major
+     * (Qualcomm 512.800.73, Mesa 26.x). Unlike apiVersion there is no variant field.
+     */
+    fun driverVersion(v: Long): String {
+        val major = (v shr 22) and 0x3ff
+        val minor = (v shr 12) and 0x3ff
+        val patch = v and 0xfff
+        return "$major.$minor.$patch"
+    }
+
     fun slug(s: String): String =
         s.replace(Regex("[^A-Za-z0-9._-]+"), "-").trim('-').take(48).ifEmpty { "driver" }
 

@@ -15,6 +15,8 @@ data class AppSettings(
     val record: Boolean = false,
     val exportToDownloads: Boolean = true,
     val perTestLogLimit: Int = 5000,
+    /** Full libwrap-style kernel log in each test's output when recording the system driver. */
+    val rawKgslLog: Boolean = true,
     val driverId: String = DriverInfo.SYSTEM_ID,
 ) {
     val captureCapBytes: Long
@@ -48,6 +50,7 @@ class SettingsStore(context: Context) {
         record = prefs.getBoolean("record", false),
         exportToDownloads = prefs.getBoolean("exportToDownloads", true),
         perTestLogLimit = prefs.getInt("perTestLogLimit", 5000),
+        rawKgslLog = prefs.getBoolean("rawKgslLog", true),
         driverId = prefs.getString("driverId", DriverInfo.SYSTEM_ID) ?: DriverInfo.SYSTEM_ID,
     )
 
@@ -63,6 +66,7 @@ class SettingsStore(context: Context) {
             .putBoolean("record", s.record)
             .putBoolean("exportToDownloads", s.exportToDownloads)
             .putInt("perTestLogLimit", s.perTestLogLimit)
+            .putBoolean("rawKgslLog", s.rawKgslLog)
             .putString("driverId", s.driverId)
             .apply()
         _state.value = s

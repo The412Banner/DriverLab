@@ -36,6 +36,7 @@ class RunManager(
         val batchSize: Int,
         val perTestLogLimit: Int,
         val export: Boolean,
+        val rawLog: Boolean = true,
     )
 
     enum class Phase { STARTING, RUNNING, FINISHING, DONE, STOPPED, FAILED }
@@ -158,6 +159,15 @@ class RunManager(
                 val size = if (req.record) 1 else req.batchSize.coerceIn(1, 5000)
                 selection.expand(req.selection) { name ->
                     if (stopFlag.get() || failure != null) return@expand
+                    if (isGles(name)) {
+                        // GLES programs run one per process; keep the catalog order.
+                        if (batch.isNotEmpty()) {
+                            failure = runBatch(batch.toList())
+                            batch.clear()
+                        }
+                        if (failure == null && !stopFlag.get()) runGles(name)
+                        return@expand
+                    }
                     batch += name
                     if (batch.size >= size) {
                         failure = runBatch(batch.toList())
@@ -250,7 +260,10 @@ class RunManager(
             log.flush()
         }
 
-        fun finish(name: String, status: TestStatus, msg: String, started: Long, stdout: CharSequence, recLog: File?, capture: String?) {
+        fun finish(
+            name: String, status: TestStatus, msg: String, started: Long, stdout: CharSequence,
+            recLog: File?, capture: String?, rawOut: File? = null,
+        ) {
             val now = System.currentTimeMillis()
             val r = TestResult(name, status, msg, if (started > 0) now - started else 0, now, batchNo, capture)
             tsv.write(SessionStore.resultLine(r)); tsv.write("\n")
@@ -258,7 +271,7 @@ class RunManager(
             log.write("[${Fmt.stamp(now)}] $tag ${Fmt.duration(r.durationMs).padStart(9)}  $name${if (msg.isNotEmpty()) " — $msg" else ""}\n")
             if (done % 50 == 0L) { tsv.flush(); log.flush() }
             if (perTestFiles) {
-                val f = File(dir, "tests/${SessionStore.safeName(name)}.log")
+                val f = File(dir, "tests/${SessionStore.fileBase(name)}.log")
                 f.bufferedWriter().use { w ->
                     w.write("test: $name\nstatus: ${status.key}${if (msg.isNotEmpty()) " ($msg)" else ""}\nduration: ${r.durationMs} ms\nfinished: ${Fmt.stamp(now)}\ndriver: ${driver!!.name}\n")
                     if (recLog != null && recLog.exists()) {
@@ -266,7 +279,7 @@ class RunManager(
                         recLog.bufferedReader().use { it.copyTo(w) }
                     }
                     w.write("\n---- test output ----\n")
-                    w.write(stdout.toString())
+                    if (rawOut != null && rawOut.exists()) rawOut.bufferedReader().use { it.copyTo(w) } else w.write(stdout.toString())
                 }
             }
             done++
@@ -276,6 +289,96 @@ class RunManager(
                 recent.addFirst(r)
                 while (recent.size > 40) recent.removeLast()
             }
+        }
+
+        /** Runs one freedreno GLES test program (system driver only). */
+        fun runGles(name: String) {
+            batchNo++
+            val test = name.removePrefix("$GLES_ROOT.")
+            if (!driver!!.isSystem) {
+                finish(name, TestStatus.NOT_SUPPORTED, "OpenGL ES tests run on the system driver only", 0, "", null, null)
+                return
+            }
+            val exe = File(Paths.nativeDir(context), "libtest_${test.removePrefix("test-")}.so")
+            if (!exe.exists()) {
+                finish(name, TestStatus.INTERNAL_ERROR, "Test program ${exe.name} is missing from this build", 0, "", null, null)
+                return
+            }
+            val tag = "%05d".format(batchNo)
+            val out = File(dir, "output/batch-$tag.txt")
+            val captureTmp = File(work, "capture.rd.gz").apply { delete() }
+            val recLog = File(work, "kgsl.log").apply { delete() }
+            val started = System.currentTimeMillis()
+            current = name
+            currentSince = started
+            val p = try {
+                CtsRunner(context).startGles(
+                    exe,
+                    CtsRunner.Launch(
+                        caselist = File(work, "none"), qpa = File(work, "none"), driver = driver!!, driverLib = null, workDir = work,
+                        record = req.record, captureCapBytes = req.captureCapBytes, captureFile = captureTmp,
+                        recorderLog = recLog, testName = test, rawLogToStdout = req.rawLog,
+                    ),
+                )
+            } catch (e: Exception) {
+                current = null
+                finish(name, TestStatus.INTERNAL_ERROR, "Could not start ${exe.name}: ${e.message}", started, "", null, null)
+                return
+            }
+            process = p
+            val timedOut = AtomicBoolean(false)
+            val timeoutMs = req.timeoutSec * 1000L
+            val watchdog = Thread {
+                try {
+                    while (p.isAlive) {
+                        Thread.sleep(250)
+                        if (timeoutMs > 0 && System.currentTimeMillis() - started > timeoutMs) {
+                            timedOut.set(true); p.destroyForcibly(); break
+                        }
+                    }
+                } catch (_: InterruptedException) {
+                }
+            }.apply { isDaemon = true; start() }
+            val tail = ArrayDeque<String>()
+            var problem: String? = null
+            out.bufferedWriter().use { w ->
+                p.inputStream.bufferedReader().use { rd ->
+                    while (true) {
+                        val line = rd.readLine() ?: break
+                        w.write(line); w.write("\n")
+                        if (line.isNotBlank() && !line.startsWith("\t") && !line.startsWith("> [") && !line.startsWith("< [")) {
+                            tail.addLast(line); if (tail.size > 6) tail.removeFirst()
+                        }
+                        if (problem == null && (line.contains("ERROR") || line.startsWith("Failed"))) problem = line.trim()
+                    }
+                }
+            }
+            val exit = runCatching { p.waitFor() }.getOrDefault(-1)
+            watchdog.interrupt()
+            process = null
+            current = null
+            val status = when {
+                stopFlag.get() -> TestStatus.STOPPED
+                timedOut.get() -> TestStatus.TIMEOUT
+                exit == 0 -> TestStatus.PASS
+                exit == 77 -> TestStatus.NOT_SUPPORTED
+                exit > 128 -> TestStatus.CRASH
+                else -> TestStatus.FAIL
+            }
+            val msg = when (status) {
+                TestStatus.PASS -> tail.lastOrNull { it.startsWith("PASS") || it.contains(" ok") }.orEmpty()
+                TestStatus.TIMEOUT -> "No result after ${req.timeoutSec} s; stopped"
+                TestStatus.STOPPED -> "Stopped by user"
+                TestStatus.NOT_SUPPORTED -> tail.lastOrNull().orEmpty()
+                else -> (problem ?: tail.lastOrNull().orEmpty()) + " (exit ${exitText(exit)})"
+            }
+            val cap = if (req.record && captureTmp.exists()) {
+                val base = SessionStore.fileBase(name)
+                captureTmp.copyTo(File(dir, "captures/$base.rd.gz"), overwrite = true)
+                captureTmp.delete()
+                "captures/$base.rd.gz"
+            } else null
+            finish(name, status, msg.take(300), started, "", if (req.rawLog) null else recLog, cap, rawOut = out)
         }
 
         /** Runs one batch, restarting after crashes. Returns a fatal problem, or null. */
@@ -298,6 +401,7 @@ class RunManager(
                             caselist = caselist, qpa = qpa, driver = driver!!, driverLib = lib, workDir = work,
                             record = req.record, captureCapBytes = req.captureCapBytes,
                             captureFile = captureTmp, recorderLog = recLog, turnipDumpDir = dumpDir, testName = single,
+                            rawLogToStdout = req.rawLog,
                         ),
                     )
                 } catch (e: Exception) {
@@ -335,9 +439,10 @@ class RunManager(
 
                 fun captureFor(name: String): String? {
                     if (!req.record) return null
-                    val base = SessionStore.safeName(name)
+                    val base = SessionStore.fileBase(name)
                     if (driver!!.isSystem) {
-                        if (captureTmp.exists() && captureTmp.length() > 0) {
+                        // Kept even when empty, like the original app's zip.
+                        if (captureTmp.exists()) {
                             val dst = File(dir, "captures/$base.rd.gz")
                             captureTmp.copyTo(dst, overwrite = true); captureTmp.delete()
                             return "captures/$base.rd.gz"
@@ -398,7 +503,7 @@ class RunManager(
                 watchdog.interrupt()
                 process = null
                 stash?.let { st ->
-                    finish(st.name, st.status, st.message, st.started, st.stdout, recLog, captureFor(st.name))
+                    finish(st.name, st.status, st.message, st.started, st.stdout, recLog, captureFor(st.name), rawOut = out)
                 }
                 val name = cur
                 if (name != null) {
@@ -413,7 +518,7 @@ class RunManager(
                         else -> "Process ended without a result (exit ${exitText(exit)})"
                     }
                     val cap = if (single != null) captureFor(name) else null
-                    finish(name, status, msg, curStart, slice, if (single != null) recLog else null, cap)
+                    finish(name, status, msg, curStart, slice, if (single != null) recLog else null, cap, rawOut = if (single != null) out else null)
                     remaining.remove(name)
                     progressed = true
                     current = null

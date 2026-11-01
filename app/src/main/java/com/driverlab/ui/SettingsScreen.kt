@@ -104,6 +104,13 @@ fun SettingsScreen(nav: NavHostController) {
                 }
             }
             item {
+                SwitchRow(
+                    "Full kernel log",
+                    "When recording the system driver, each test's log lists every kernel call with its data, in the same format as the adreno-cmdstream-gather app (logs can be several MB). Off: a short summary.",
+                    s.rawKgslLog,
+                ) { v -> AppGraph.settings.update { it.copy(rawKgslLog = v) } }
+            }
+            item {
                 SettingCard("Capture size", s.captureLabel + ". The command streams are always kept; this limits other buffers such as textures.") {
                     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                         listOf("Light", "Standard", "Full").forEachIndexed { i, label ->

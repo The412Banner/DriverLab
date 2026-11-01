@@ -11,10 +11,16 @@ import java.nio.ByteOrder
 import kotlin.coroutines.coroutineContext
 
 const val ROOT = "dEQP-VK"
+/** Root of the freedreno OpenGL ES test programs (system driver only). */
+const val GLES_ROOT = "fd-gles"
 
-/** One top-level CTS group (e.g. "api") loaded from assets/cts/catalog/<top>.bin. */
+fun isGles(path: String): Boolean = path == GLES_ROOT || path.startsWith("$GLES_ROOT.")
+
+/** One top-level group: a CTS group from assets/cts/catalog/<top>.bin, or the GLES list. */
 class GroupTree(
     val top: String,
+    /** Full path of node 0, e.g. "dEQP-VK.api" or "fd-gles". */
+    val rootPath: String,
     private val strings: Array<String>,
     private val nameIdx: IntArray,
     private val parent: IntArray,
@@ -31,21 +37,22 @@ class GroupTree(
     fun path(n: Int): String {
         val parts = ArrayList<String>(8)
         var x = n
-        while (x >= 0) {
+        while (x > 0) {
             parts.add(name(x))
             x = parent[x]
         }
-        val sb = StringBuilder(ROOT)
+        val sb = StringBuilder(rootPath)
         for (i in parts.indices.reversed()) sb.append('.').append(parts[i])
         return sb.toString()
     }
 
     /** Node for a full path like "dEQP-VK.api.smoke.triangle", or -1. */
     fun find(path: String): Int {
-        val segs = path.split('.')
-        if (segs.size < 2 || segs[0] != ROOT || segs[1] != top) return -1
+        if (path == rootPath) return 0
+        if (!path.startsWith("$rootPath.")) return -1
+        val segs = path.substring(rootPath.length + 1).split('.')
         var node = 0
-        for (i in 2 until segs.size) {
+        for (i in segs.indices) {
             var next = -1
             for (c in children(node)) if (name(c) == segs[i]) { next = c; break }
             if (next < 0) return -1
@@ -63,6 +70,18 @@ class GroupTree(
     internal fun nameIndex(n: Int): Int = nameIdx[n]
 
     companion object {
+        /** A flat group (root + leaves), used for the GLES test list. */
+        fun flat(root: String, names: List<String>): GroupTree {
+            val n = names.size
+            val strings = arrayOf(root) + names.toTypedArray()
+            val name = IntArray(n + 1) { it }
+            val parent = IntArray(n + 1) { if (it == 0) -1 else 0 }
+            val first = IntArray(n + 1) { if (it == 0) 1 else 0 }
+            val count = IntArray(n + 1) { if (it == 0) n else 0 }
+            val tests = IntArray(n + 1) { if (it == 0) n else 1 }
+            return GroupTree(root, root, strings, name, parent, first, count, tests)
+        }
+
         fun parse(top: String, bytes: ByteArray): GroupTree {
             val b = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
             val magic = ByteArray(4).also { b.get(it) }
@@ -86,20 +105,28 @@ class GroupTree(
             val first = col()
             val count = col()
             val tests = col()
-            return GroupTree(top, strings, name, parent, first, count, tests)
+            return GroupTree(top, "$ROOT.$top", strings, name, parent, first, count, tests)
         }
     }
 }
 
 class Catalog(private val context: Context) {
-    data class Top(val name: String, val tests: Int, val nodes: Int, val file: String)
+    data class Top(val name: String, val tests: Int, val nodes: Int, val file: String) {
+        val path: String get() = if (name == GLES_ROOT) GLES_ROOT else "$ROOT.$name"
+        val isGles: Boolean get() = name == GLES_ROOT
+    }
     data class Preset(val id: String, val title: String, val description: String, val patterns: List<String>)
     data class Hit(val path: String, val isLeaf: Boolean, val tests: Int)
 
     var ctsTag: String = ""
         private set
+    /** Number of Vulkan CTS tests (everything under dEQP-VK). */
     var total: Long = 0
         private set
+    var glesTests: List<String> = emptyList()
+        private set
+    val glesTotal: Long get() = glesTests.size.toLong()
+    private var descriptions: Map<String, String> = emptyMap()
     var tops: List<Top> = emptyList()
         private set
     var presets: List<Preset> = emptyList()
@@ -125,10 +152,19 @@ class Catalog(private val context: Context) {
                     list.add(Top(f[0], f[1].toInt(), f[2].toInt(), f[3]))
                 }
             }
+            glesTests = runCatching {
+                context.assets.open("gles/tests.txt").bufferedReader().readLines().map { it.trim() }.filter { it.isNotEmpty() }
+            }.getOrDefault(emptyList())
+            if (glesTests.isNotEmpty()) list.add(0, Top(GLES_ROOT, glesTests.size, glesTests.size + 1, ""))
             tops = list
         } catch (e: Exception) {
             tops = emptyList()
         }
+        descriptions = runCatching {
+            context.assets.open("descriptions.tsv").bufferedReader().readLines()
+                .filter { it.isNotBlank() && !it.startsWith("#") && it.contains('\t') }
+                .associate { it.substringBefore('\t') to it.substringAfter('\t') }
+        }.getOrDefault(emptyMap())
         presets = try {
             context.assets.open("cts/catalog/presets.tsv").bufferedReader().readLines()
                 .filter { it.isNotBlank() && !it.startsWith("#") }
@@ -142,13 +178,28 @@ class Catalog(private val context: Context) {
     }
 
     fun topOf(path: String): String? {
+        if (isGles(path)) return GLES_ROOT
         val segs = path.split('.')
         return if (segs.size >= 2 && segs[0] == ROOT) segs[1] else null
+    }
+
+    /**
+     * Explanation for a path: its own text, or the nearest described parent's
+     * (returned with that parent's path so the UI can say which group it is).
+     */
+    fun describe(path: String): Pair<String, String>? {
+        var p: String? = path
+        while (p != null) {
+            descriptions[p]?.let { return p!! to it }
+            p = SelectionStore.parentOf(p)
+        }
+        return null
     }
 
     suspend fun tree(top: String): GroupTree = withContext(Dispatchers.IO) {
         lock.withLock {
             cache[top] ?: run {
+                if (top == GLES_ROOT) return@run GroupTree.flat(GLES_ROOT, glesTests).also { cache[top] = it }
                 val entry = tops.first { it.name == top }
                 val bytes = context.assets.open("cts/catalog/${entry.file}").use { it.readBytes() }
                 GroupTree.parse(top, bytes).also { cache[top] = it }
@@ -159,6 +210,7 @@ class Catalog(private val context: Context) {
     /** Number of tests at or under a path ("dEQP-VK" = everything). */
     suspend fun testsUnder(path: String): Int {
         if (path == ROOT) return total.toInt()
+        if (path == GLES_ROOT) return glesTests.size
         val top = topOf(path) ?: return 0
         if (tops.none { it.name == top }) return 0
         val t = tree(top)

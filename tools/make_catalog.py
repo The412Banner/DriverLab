@@ -135,6 +135,9 @@ def main():
                 keep = []
                 for p in pats.split(","):
                     p = p.strip()
+                    if p == "fd-gles.*" or p.startswith("fd-gles."):
+                        keep.append(p)  # GLES programs are not in the CTS list
+                        continue
                     if p.endswith(".*"):
                         ok = p[:-2] in groups
                     else:

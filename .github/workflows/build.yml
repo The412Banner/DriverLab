@@ -91,7 +91,10 @@ jobs:
           A=app/src/main/assets/cts
           mkdir -p "$J" "$A/catalog"
           cp cts-out/deqp-vk "$J/libdeqp_vk.so"
-          cp native-out/libdlvkshim.so native-out/libdlrec.so "$J/"
+          cp native-out/libdlvkshim.so native-out/libdlrec.so native-out/libtest_*.so "$J/"
+          mkdir -p app/src/main/assets/gles
+          cp native/gles/tests.txt app/src/main/assets/gles/tests.txt
+          echo "GLES programs: $(ls "$J"/libtest_*.so | wc -l)"
           cp cts-out/vulkan-data.zip cts-out/cts-version.txt "$A/"
           cp catalog-out/* "$A/catalog/"
           ls -la "$J" "$A"

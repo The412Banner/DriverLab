@@ -41,7 +41,12 @@ class SelectionStore(private val catalog: Catalog) {
         replace(normalize(m), p.title)
     }
 
-    fun selectAll() = replace(mapOf(ROOT to Entry(true, catalog.total.toInt())), "All tests")
+    fun selectAll() {
+        val m = LinkedHashMap<String, Entry>()
+        if (catalog.glesTotal > 0) m[GLES_ROOT] = Entry(true, catalog.glesTotal.toInt())
+        m[ROOT] = Entry(true, catalog.total.toInt())
+        replace(m, "All tests")
+    }
 
     fun set(path: String, include: Boolean, tests: Int) {
         val m = LinkedHashMap(_state.value)
@@ -72,8 +77,8 @@ class SelectionStore(private val catalog: Catalog) {
         if (map.isEmpty()) return 0
         val keys = map.keys.sortedBy { it.length }
         fun nearestChildren(parent: String): List<String> {
-            val prefix = if (parent == ROOT) "$ROOT." else "$parent."
-            val under = keys.filter { it != parent && (parent == ROOT || it.startsWith(prefix)) && it.startsWith("$ROOT.") }
+            val prefix = "$parent."
+            val under = keys.filter { it.startsWith(prefix) }
             return under.filter { k -> under.none { o -> o != k && k.startsWith("$o.") } }
         }
         fun countUnder(key: String, eff: Boolean, tests: Long): Long {
@@ -84,8 +89,8 @@ class SelectionStore(private val catalog: Catalog) {
             }
             return c
         }
-        val root = map[ROOT]
-        return countUnder(ROOT, root?.include ?: false, catalog.total)
+        return countUnder(ROOT, map[ROOT]?.include ?: false, catalog.total) +
+            countUnder(GLES_ROOT, map[GLES_ROOT]?.include ?: false, catalog.glesTotal)
     }
 
     /** Streams every selected test name in catalog order. */
@@ -93,7 +98,7 @@ class SelectionStore(private val catalog: Catalog) {
         if (map.isEmpty()) return
         for (top in catalog.tops) {
             coroutineContext.ensureActive()
-            val topPath = "$ROOT.${top.name}"
+            val topPath = top.path
             val topEff = effectiveIn(map, topPath, self = true)
             val anyUnder = map.keys.any { it.startsWith("$topPath.") }
             if (!topEff && !anyUnder) continue

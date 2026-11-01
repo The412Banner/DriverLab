@@ -21,3 +21,35 @@ for f in "$OUT"/*.so; do
   "$TC/llvm-readelf" -d "$f" | grep NEEDED
   "$TC/llvm-readelf" --dyn-syms -W "$f" | awk '$5=="GLOBAL" && $7!="UND"{print "  export", $8}'
 done
+
+# ---- freedreno GLES tests (system driver only), shipped as libtest_<name>.so ----
+# Sources: freedreno/freedreno tests-3d + tests-2d (Rob Clark, MIT) at a pinned
+# commit, plus DriverLab's own test-texturator and test-ovr-multiview.
+FD_COMMIT=aa1e03a4f0881b9c3d02f23f080352419eccc9c9
+FD="${FD_DIR:-$PWD/freedreno-src}"
+if [ ! -d "$FD/.git" ]; then
+  git clone -q https://github.com/freedreno/freedreno.git "$FD"
+fi
+git -C "$FD" checkout -q "$FD_COMMIT"
+GL_CFLAGS=(-O2 -DBIONIC -std=gnu99 -fPIE -pie -Wno-everything -Wl,-z,max-page-size=16384
+           -I"$FD/includes" -I"$FD/util")
+GL_LIBS=(-lEGL -lGLESv3 -lGLESv2 -llog -lm -ldl)
+built=0
+while read -r t; do
+  [ -z "$t" ] && continue
+  n="${t#test-}"
+  if [ -f "$HERE/gles/$t.c" ]; then
+    src=("$HERE/gles/$t.c"); inc=(-I"$FD/tests-3d")
+  elif [ -f "$FD/tests-3d/$t.c" ]; then
+    src=("$FD/tests-3d/$t.c"); inc=(-I"$FD/tests-3d")
+  elif [ -f "$FD/tests-2d/$t.c" ]; then
+    src=("$FD/tests-2d/$t.c" "$FD/tests-2d/c2d2-shim.c"); inc=(-I"$FD/tests-2d")
+  else
+    echo "missing source for $t" >&2; exit 1
+  fi
+  "$CC" "${GL_CFLAGS[@]}" "${inc[@]}" -o "$OUT/libtest_$n.so" "${src[@]}" "$FD/util/bmp.c" "${GL_LIBS[@]}"
+  "$STRIP" --strip-unneeded "$OUT/libtest_$n.so"
+  built=$((built + 1))
+done < "$HERE/gles/tests.txt"
+echo "built $built GLES tests"
+test "$built" -eq "$(grep -c . "$HERE/gles/tests.txt")"

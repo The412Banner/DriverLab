@@ -11,3 +11,4 @@ captures/
 /native-out/
 app/src/main/jniLibs/
 app/src/main/assets/cts/
+app/src/main/assets/gles/

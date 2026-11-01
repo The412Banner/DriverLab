@@ -28,6 +28,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -226,5 +228,74 @@ fun InfoLine(label: String, value: String, mono: Boolean = false) {
 fun IconBadge(icon: ImageVector, tint: Color, modifier: Modifier = Modifier, size: Dp = 40.dp) {
     Box(modifier.size(size).clip(RoundedCornerShape(12.dp)).background(tint.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
         Icon(icon, null, tint = tint, modifier = Modifier.size(size * 0.55f))
+    }
+}
+
+/** Small (i) button that opens a plain-language explanation. */
+@Composable
+fun InfoButton(title: String, text: String, extra: String? = null) {
+    var open by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    IconButton(onClick = { open = true }, modifier = Modifier.size(36.dp)) {
+        Icon(
+            androidx.compose.material.icons.Icons.Outlined.Info, "What is this?",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp),
+        )
+    }
+    if (open) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { open = false },
+            title = { Text(title) },
+            text = {
+                Column {
+                    Text(text, style = MaterialTheme.typography.bodyMedium)
+                    if (extra != null) {
+                        Spacer(Modifier.height(12.dp))
+                        Text(extra, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = { open = false }) { Text("OK") } },
+        )
+    }
+}
+
+/** Explanation for a test, group or root, using the nearest described parent. */
+@Composable
+fun ExplainButton(path: String, isLeaf: Boolean, tests: Int) {
+    val catalog = com.driverlab.AppGraph.catalog
+    val d = catalog.describe(path)
+    val short = path.removePrefix("dEQP-VK.").removePrefix("fd-gles.")
+    val text = when {
+        d == null -> "No explanation for this one yet. Its name lists what it covers: ${short.replace(".", " › ")}."
+        d.first == path -> d.second
+        else -> {
+            val group = d.first.removePrefix("dEQP-VK.").ifEmpty { d.first }
+            "Part of \"$group\": ${d.second}" +
+                if (isLeaf) "\n\nThis test's name lists the exact case: ${short.replace(".", " › ")}." else ""
+        }
+    }
+    val extra = (if (isLeaf) "One test" else "${com.driverlab.core.Fmt.count(tests.toLong())} tests") + " · " + path
+    InfoButton(if (path == com.driverlab.core.GLES_ROOT) "OpenGL ES tests (freedreno)" else short.substringAfterLast('.').ifEmpty { path }, text, extra)
+}
+
+@Composable
+fun PresetChips(
+    presets: List<com.driverlab.core.Catalog.Preset>,
+    selectedTitle: String?,
+    onPick: (com.driverlab.core.Catalog.Preset) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+        for (p in presets) {
+            androidx.compose.material3.FilterChip(
+                selected = selectedTitle == p.title,
+                onClick = { onPick(p) },
+                label = { Text(p.title) },
+            )
+            InfoButton(p.title, p.description, "Contains: " + p.patterns.joinToString(", ") {
+                it.removePrefix("dEQP-VK.").removeSuffix(".*").removePrefix("fd-gles.")
+            }.let { if (it.length > 400) it.take(400) + "…" else it })
+            Spacer(Modifier.width(4.dp))
+        }
     }
 }

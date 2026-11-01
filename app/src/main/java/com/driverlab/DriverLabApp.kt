@@ -72,7 +72,9 @@ object AppGraph {
             sessions.refresh()
             setup.ensure()
             // Learn what the system driver reports the first time the app runs.
-            if (setup.state.value is CtsSetup.State.Ready && drivers.get("system")?.probe == null) {
+            val sys = drivers.get("system")?.probe
+            // Re-check once when the stored result is missing or from the 0.1 build with the old version format.
+            if (setup.state.value is CtsSetup.State.Ready && (sys == null || sys.driverVersion.contains("(Qualcomm)"))) {
                 drivers.probe("system")
             }
         }

@@ -110,21 +110,27 @@ class SessionStore(private val context: Context) {
             }
         }
         // Same layout as the adreno-cmdstream-gather app: <test>.log + <test>.rd per test.
+        // The .log is the test process's own output (with the kernel log when recorded),
+        // the .rd the gzip capture, kept even when empty.
         val tr = File(exp, "${base}_test_results.zip")
+        val results = ArrayList<TestResult>()
+        File(d, "results.tsv").takeIf { it.exists() }?.bufferedReader()?.useLines { seq ->
+            for (l in seq) parseResult(l)?.let { results += it }
+        }
+        val perBatch = results.groupingBy { it.batch }.eachCount()
         ZipOutputStream(tr.outputStream().buffered(1 shl 16)).use { zip ->
             val seen = HashSet<String>()
-            File(d, "tests").listFiles()?.sortedBy { it.name }?.forEach { f ->
-                if (!f.name.endsWith(".log")) return@forEach
-                val name = f.name
-                if (seen.add(name)) {
-                    zip.putNextEntry(ZipEntry(name)); f.inputStream().use { it.copyTo(zip) }; zip.closeEntry()
+            for (r in results) {
+                val fb = fileBase(r.name)
+                if (!seen.add(fb)) continue
+                val raw = File(d, "output/batch-%05d.txt".format(r.batch))
+                val logFile = if (perBatch[r.batch] == 1 && raw.exists()) raw else File(d, "tests/$fb.log")
+                if (logFile.exists()) {
+                    zip.putNextEntry(ZipEntry("$fb.log")); logFile.inputStream().use { it.copyTo(zip) }; zip.closeEntry()
                 }
-            }
-            File(d, "captures").listFiles()?.sortedBy { it.name }?.forEach { f ->
-                if (!f.name.endsWith(".rd.gz")) return@forEach
-                val name = f.name.removeSuffix(".gz")
-                if (seen.add(name)) {
-                    zip.putNextEntry(ZipEntry(name)); f.inputStream().use { it.copyTo(zip) }; zip.closeEntry()
+                val cap = File(d, "captures/$fb.rd.gz")
+                if (cap.exists()) {
+                    zip.putNextEntry(ZipEntry("$fb.rd")); cap.inputStream().use { it.copyTo(zip) }; zip.closeEntry()
                 }
             }
         }
@@ -159,15 +165,26 @@ class SessionStore(private val context: Context) {
         return uri.toString()
     }
 
+    /**
+     * MIME type for saving and sharing. MediaStore appends an extension when the
+     * type does not match the name (".log" became ".log.txt" with text/plain),
+     * so text files other than .txt are saved as octet-stream.
+     */
     fun mimeOf(name: String): String {
         val ext = name.substringAfterLast('.', "").lowercase()
         return when (ext) {
             "zip" -> "application/zip"
             "json" -> "application/json"
-            "gz" -> "application/gzip"
-            "log", "txt", "tsv", "qpa" -> MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "text/plain"
+            "txt" -> "text/plain"
+            "log", "tsv", "qpa", "rd", "gz" -> "application/octet-stream"
             else -> MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "application/octet-stream"
         }
+    }
+
+    /** For sharing, logs are offered as text so viewers and chat apps open them. */
+    fun shareMime(name: String): String = when (name.substringAfterLast('.', "").lowercase()) {
+        "log", "txt", "tsv", "qpa" -> "text/plain"
+        else -> mimeOf(name)
     }
 
     fun uriFor(f: File): Uri = FileProvider.getUriForFile(context, "${context.packageName}.files", f)
@@ -176,7 +193,7 @@ class SessionStore(private val context: Context) {
         val uris = ArrayList(files.map { uriFor(it) })
         val intent = if (uris.size == 1) {
             Intent(Intent.ACTION_SEND).apply {
-                type = mimeOf(files[0].name)
+                type = shareMime(files[0].name)
                 putExtra(Intent.EXTRA_STREAM, uris[0])
             }
         } else {
@@ -196,6 +213,9 @@ class SessionStore(private val context: Context) {
     fun sizeOf(f: File): Long = if (f.isDirectory) f.walkTopDown().filter { it.isFile }.sumOf { it.length() } else f.length()
 
     companion object {
+        /** File name base for a test: GLES tests drop the "fd-gles." prefix (test-draw.log). */
+        fun fileBase(test: String): String = safeName(test.removePrefix("$GLES_ROOT."))
+
         fun safeName(test: String): String {
             val clean = test.replace(Regex("[^A-Za-z0-9._-]"), "_")
             return if (clean.length <= 180) clean else clean.take(160) + "_" + Integer.toHexString(test.hashCode())

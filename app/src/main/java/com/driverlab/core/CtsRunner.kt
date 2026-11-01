@@ -32,7 +32,16 @@ class CtsRunner(private val context: Context) {
         val recorderLog: File? = null,
         val turnipDumpDir: File? = null,
         val testName: String? = null,
+        /** Write the libwrap-style kernel log into the process output instead of [recorderLog]. */
+        val rawLogToStdout: Boolean = false,
     )
+
+    /** Starts one freedreno GLES test program (system driver only). */
+    fun startGles(exe: File, l: Launch): Process {
+        val pb = ProcessBuilder(listOf(exe.absolutePath)).directory(l.workDir).redirectErrorStream(true)
+        applyEnv(pb.environment(), l)
+        return pb.start()
+    }
 
     fun start(l: Launch): Process {
         val cmd = ArrayList<String>()
@@ -52,7 +61,11 @@ class CtsRunner(private val context: Context) {
         }
 
         val pb = ProcessBuilder(cmd).directory(l.workDir).redirectErrorStream(true)
-        val env = pb.environment()
+        applyEnv(pb.environment(), l)
+        return pb.start()
+    }
+
+    private fun applyEnv(env: MutableMap<String, String>, l: Launch) {
         val cache = File(context.cacheDir, "deqp").apply { mkdirs() }
         env["HOME"] = cache.absolutePath
         env["TMPDIR"] = cache.absolutePath
@@ -67,7 +80,7 @@ class CtsRunner(private val context: Context) {
         if (l.record) {
             if (l.driver.isSystem) {
                 l.captureFile?.let { env["DLREC_PATH"] = it.absolutePath }
-                l.recorderLog?.let { env["DLREC_LOG"] = it.absolutePath }
+                if (l.rawLogToStdout) env["DLREC_LOG"] = "-" else l.recorderLog?.let { env["DLREC_LOG"] = it.absolutePath }
                 env["DLREC_BUF_CAP"] = l.captureCapBytes.toString()
                 l.testName?.let { env["DLREC_TESTNAME"] = it }
             } else {
@@ -79,7 +92,6 @@ class CtsRunner(private val context: Context) {
                 }
             }
         }
-        return pb.start()
     }
 
     companion object {

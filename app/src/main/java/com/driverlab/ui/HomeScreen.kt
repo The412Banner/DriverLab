@@ -99,6 +99,7 @@ fun rememberRunStarter(nav: NavHostController): RunStarter {
             batchSize = settings.batchSize,
             perTestLogLimit = settings.perTestLogLimit,
             export = settings.exportToDownloads,
+            rawLog = settings.rawKgslLog,
         )
         if (AppGraph.runs.start(req)) nav.navigate("run")
     }
@@ -219,11 +220,7 @@ fun HomeScreen(nav: NavHostController) {
                         TextButton(onClick = { nav.goTab("tests") }) { Text("Choose") }
                     }
                     Spacer(Modifier.height(10.dp))
-                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        for (p in AppGraph.catalog.presets) {
-                            AssistChip(onClick = { scope.launch { AppGraph.selection.applyPreset(p) } }, label = { Text(p.title) })
-                        }
-                    }
+                    PresetChips(AppGraph.catalog.presets, label, { p -> scope.launch { AppGraph.selection.applyPreset(p) } })
                 }
             }
         }
