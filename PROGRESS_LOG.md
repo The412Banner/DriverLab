@@ -2,6 +2,14 @@
 
 Newest first.
 
+## 2026-11-01 — v0.1.2 release APK INSTALLED on the Pocket FIT (user: "install 0.1.2 on the pocket fit")
+
+Staged /sdcard/Download/DriverLab-v0.1.2-91ee8c28.apk (release asset, sha256 761a0683… host ==
+device); installed base.apk sha256 761a068312b504b9b4785852309f08d6afbfec6e5e224e3c47b8ab8d7838bb57
+== release, versionCode 3, versionName 0.1.2, 15:08:18 local. Settings kept (driverId=system,
+record=true, jobs=1). Quick check with recording: 152 tests, 25.2 s, 123/2/27, 152 captures,
+no crash-buffer lines, no FATAL/ANR. Termux back, peer root-9c got "done".
+
 ## 2026-11-01 — merged feat/test-tools, RELEASED v0.1.2 (main)
 
 User: "merge it and make it 0.1.2". Backup ref refs/backup/20261101/main-before-test-tools
