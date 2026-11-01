@@ -2,68 +2,86 @@
 
 <img src="docs/icon.png" width="96" align="right" alt="DriverLab icon"/>
 
-DriverLab is an Android app (Jetpack Compose) that runs the same GPU tests on
-two drivers and lets you compare them:
+DriverLab runs the same GPU tests on two Vulkan drivers on your Android
+device and shows how they differ:
 
-- the phone's **system Vulkan driver** (Qualcomm's driver on Adreno phones), and
+- the device's **own driver** (Qualcomm's on Adreno), and
 - a **custom driver** you import, such as a Mesa Turnip AdrenoTools zip.
 
-It uses the official Khronos Vulkan CTS, can record what each driver sends to
-the GPU (freedreno `.rd` captures), and shows the results side by side down to
-individual GPU registers. Nothing on the phone is changed: the custom driver is
-loaded only inside DriverLab's own test program. No root needed.
+It can also record what each driver sends to the GPU and compare the two
+register by register. Nothing on the device is changed: an imported driver
+is loaded only inside DriverLab's own test program. No root needed.
 
-Work in progress; see `PROGRESS_LOG.md`.
+**Download:** [latest release](https://github.com/The412Banner/DriverLab/releases/latest)
+· arm64, Android 11 or newer.
 
-## What it does
+## What it can do
 
-- **Tests**: browse the whole Vulkan CTS (3.2 million tests in 1.4.7.1) by
-  group, search it, use presets (Quick check, Driver info, Rendering basics,
-  Capture set), or pick any groups or single tests.
-- **Drivers**: import an AdrenoTools zip (`meta.json` + `.so`) or a bare `.so`.
-  Each driver is checked right away (`dEQP-VK.info.device_properties`) and can
-  have its own environment options such as `TU_DEBUG=sysmem`.
-- **Run**: live progress with pass/fail counters, speed and time left. Runs in a
-  foreground service, restarts the CTS after crashes, stops tests that hang.
-- **Record GPU commands** (optional):
-  - system driver: DriverLab's recorder (`libdlrec.so`, LD_PRELOAD) writes each
-    GPU submit as `.rd.gz` and logs the KGSL calls (GPU properties, buffers);
-  - Turnip: Mesa's own `FD_RD_DUMP` recorder.
-- **Results**: per session and per test (output, CTS log, registers), and
-  **Compare** two sessions: tests whose results differ, and a register diff for
-  every test recorded on both drivers.
-- **Files**: everything a run produced, grouped by driver and session, to read,
-  share, save a copy, copy to Downloads or delete.
+- **Tests**
+  - the official Vulkan conformance tests (Khronos CTS 1.4.7.1, 3.2 million tests);
+  - 68 OpenGL ES programs: the set used by the adreno-cmdstream-gather app
+    (66 from freedreno, two written for DriverLab). They run on the device's
+    own driver only.
+- **Choosing tests:** browse by group, search, pick single tests, or use a preset:
+  - Quick check: about a minute;
+  - Driver info: what the driver reports;
+  - Rendering basics;
+  - Capture set: the adreno-cmdstream-gather test set.
 
-After each run DriverLab saves to `Download/DriverLab/<yyyy-MM-dd>/`:
+  Every preset, group and test has an ⓘ button that explains what it checks.
+- **Drivers:** import a zip or `.so`. DriverLab checks it right away
+  (GPU name, Vulkan version, driver version). Each driver can have its own
+  settings, such as `TU_DEBUG=sysmem`.
+- **Running:** a live screen shows progress, pass/fail counters, speed and
+  time left. Runs keep going with the screen off. A test that crashes or
+  hangs is marked as such, and the run continues.
+- **Recording (optional):** saves each test's GPU command stream as a
+  freedreno `.rd` file.
+  - On the device's own driver, this includes a full log of the driver's
+    kernel calls, in the same format as freedreno's libwrap.
+  - On Turnip, Mesa's own recorder is used.
+- **Results:** each session can be filtered and searched. Each test shows its
+  output, its CTS log and the GPU registers its recording wrote.
+- **Compare:** pick two sessions to see which tests differ, then open a
+  register-by-register diff, with register names, for any test recorded on
+  both drivers.
+- **Files:** everything a run saved, grouped by driver and session. Read,
+  share, save a copy, copy to Downloads, or delete.
+
+After every run DriverLab saves three files to `Download/DriverLab/<date>/`:
 
 | File | Contents |
 |---|---|
-| `<HH-mm-ss>_<driver>.zip` | everything: `results.log`, `results.tsv`, `session.json`, CTS `.qpa` logs, raw output, per-test logs, captures |
-| `<HH-mm-ss>_<driver>_test_results.zip` | same layout as the adreno-cmdstream-gather app: `<test>.log` + `<test>.rd` per test |
-| `<HH-mm-ss>_<driver>_results.log` | readable, time-stamped results |
+| `<time>_<driver>.zip` | everything: readable log, results table, CTS logs, test output, recordings |
+| `<time>_<driver>_test_results.zip` | one `<test>.log` and one `<test>.rd` per test, the same layout as the adreno-cmdstream-gather app |
+| `<time>_<driver>_results.log` | readable results with a time on every line |
+
+To make the same `test_results` zip as the adreno-cmdstream-gather app:
+choose **Capture set**, keep **System driver**, turn on
+**Record GPU commands**, and press **Run**.
 
 ## How it works
 
-| Part | Source |
+| Part | What it is |
 |---|---|
-| `libdeqp_vk.so` | Khronos VK-GL-CTS `vulkan-cts-1.4.7.1`, built as an Android executable with NDK r29 (`cts/build-cts.sh`, same recipe as Mesa CI) |
-| `libdlvkshim.so` | `native/vkshim/vkshim.c`: gives the CTS a `vkGetInstanceProcAddr` from a custom driver (Android HAL `HMI` or loader ICD) via `--deqp-vk-library-path` |
-| `libdlrec.so` | `native/dlrec/dlrec.c`: KGSL submit recorder for the system driver |
-| test catalog | `tools/make_catalog.py`: compact per-group index of the CTS mustpass list |
-| register names | `tools/make_regs.py` from Mesa's `a6xx.xml` (A6XX/A7XX/A8XX) |
+| `libdeqp_vk.so` | the Vulkan CTS, built as an Android program with the NDK (`cts/build-cts.sh`) |
+| `libdlvkshim.so` | lets the CTS load a custom driver: Android HAL (`HMI`) or loader ICD (`native/vkshim`) |
+| `libdlrec.so` | records the device driver's GPU submits as `.rd` and logs its kernel calls (`native/dlrec`) |
+| `libtest_*.so` | the OpenGL ES test programs (`native/gles`, freedreno sources) |
+| test catalog | a compact index of the CTS test list (`tools/make_catalog.py`) |
+| register names | generated from Mesa's register database (`tools/make_regs.py`) |
 
-## Building
-
-GitHub Actions (`.github/workflows/build.yml`, run it with workflow_dispatch). The CTS
-(~20 min), native libraries, catalog and Gradle are cached separately, so an
-app-only change rebuilds in a few minutes. The APK is signed with the public
-AOSP test key (v1 + v2 + v3).
+Builds run on GitHub Actions (`.github/workflows/build.yml`). The CTS, the
+native libraries, the test catalog and Gradle are cached separately, so a
+normal app change builds in a few minutes. APKs are signed with the public
+AOSP test key (v1, v2 and v3).
 
 ## Credits
 
 - Khronos Group: Vulkan CTS (Apache 2.0).
-- Rob Clark and the freedreno project: the `.rd` capture format and the original
-  `libwrap` recorder idea (MIT); Mesa's register database and Turnip's `FD_RD_DUMP`.
-- Huggo: the adreno-cmdstream-gather app, and vauzi (Vauzi-17) for sharing it and
-  for the Adreno 710/720/722 register work in Banners-Turnip that started this.
+- Rob Clark and the freedreno and Mesa developers: the OpenGL ES test
+  programs, the `.rd` format and libwrap, the register database, and
+  Turnip's `FD_RD_DUMP` (MIT).
+- Huggo: the adreno-cmdstream-gather app.
+- vauzi (Vauzi-17): for sharing that app and for the Adreno 710/720/722
+  register work that started DriverLab.
