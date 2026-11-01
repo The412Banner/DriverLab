@@ -2,6 +2,21 @@
 
 Newest first.
 
+## 2026-11-01 — merged feat/test-tools, RELEASED v0.1.2 (main)
+
+User: "merge it and make it 0.1.2". Backup ref refs/backup/20261101/main-before-test-tools
+= 4729b4c7b1ec0a20424274f964dc30ea1d61c6eb pushed + verified first; main fast-forwarded
+4729b4c → 0126f628 (tree == installed/checked b792de2a + PROGRESS_LOG). README commit
+(new features; credits: DXVK Philip Rebohle and VKD3D-Proton Hans-Kristian Arntzen, names
+checked in DXVK LICENSE / GitHub profile; Hugo; Kimchi). Release cut 91ee8c28 "Release 0.1.2
+(versionCode 3)" + release-notes/v0.1.2.md. Release workflow 41344759544 (release=true,
+tag=v0.1.2, headSha 91ee8c28) success;
+https://github.com/The412Banner/DriverLab/releases/tag/v0.1.2 — Latest, tag →
+91ee8c2829778e9016980f2f5307c2b3c06b1934, asset DriverLab-v0.1.2-91ee8c28.apk sha256
+761a068312b504b9b4785852309f08d6afbfec6e5e224e3c47b8ab8d7838bb57 (== .sha256), manifest
+versionName 0.1.2, notes == release-notes/v0.1.2.md. Release APK itself not installed
+(Pocket FIT has b792de2a = same code + old version numbers). feat/test-tools kept.
+
 ## 2026-11-01 — pre2 (b792de2a) INSTALLED on the Pocket FIT (user: "install it")
 
 base.apk sha256 d240ab7b… == staged, lastUpdateTime 14:55:11 local. Opens. Found my earlier
