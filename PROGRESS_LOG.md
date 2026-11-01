@@ -29,7 +29,9 @@ tests incl. ",Fail"/" Pass" suffixes, dEQP-VK.info.*, test-clear, 1 bogus name),
 PocketFIT-own-driver-flat.zip + -subfolder.zip (this phone's own vendor driver + 11
 vendor libs + meta.json minApi 34), stevenmxz-849.zip (expect "made for a newer Android").
 
-**Next / resume:** CI green → v0.1.1-pre2 pre-release (user already asked for
+**Pre-release:** v0.1.1-pre2 PUBLISHED 13:03 EST (user yes), tag → b33343b0, hash verified. User yes to install on the Pocket FIT for an app test.
+
+**Next / resume (old):** CI green → v0.1.1-pre2 pre-release (user already asked for
 pre-releases for the Fold) only after the user OKs → device test: load a list,
 save a list, save failed from a run, re-run on another driver.
 
