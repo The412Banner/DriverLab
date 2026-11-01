@@ -2,6 +2,15 @@
 
 Newest first.
 
+## 2026-11-01 — merged to main (user go)
+
+User: "yes merge to main and delete the old APKs". Backup ref
+refs/backup/20261101/main-before-v0.1 = ffaa6020 pushed first, then main
+fast-forwarded ffaa6020 → 51d83b68 (= feat/v0.1). main's tree equals the
+released build e26682e1 except PROGRESS_LOG.md. feat/v0.1 kept (not deleted).
+Deleted from /sdcard/Download: DriverLab-v0.1-62fb66cd / b0f6b21a / f0be2226
+(.apk + .sha256); kept DriverLab-v0.1-e26682e1.apk (= the release).
+
 ## 2026-11-01 — v0.1 RELEASED (feat/v0.1, release from e26682e1)
 
 **Release:** https://github.com/The412Banner/DriverLab/releases/tag/v0.1 — tag v0.1 →
