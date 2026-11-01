@@ -15,7 +15,15 @@ https://github.com/The412Banner/DriverLab/releases/tag/v0.1.1 — Latest, tag �
 manifest versionName 0.1.1, notes == release-notes/v0.1.1.md. The release APK itself is
 not installed anywhere (same code as device-checked bdaaf3ba + version numbers).
 fix/blob-driver-zips kept (not deleted).
-## 2026-11-01 — feat/test-tools: 5 features (written, NOT compiled yet)
+## 2026-11-01 — feat/test-tools: 5 features, CI GREEN 819d7867 (NOT device-tested)
+
+First compile 41340346445 FAILED: my Results rewrite deleted shareSession /
+saveSessionToDownloads (they sat between ResultsScreen and SessionScreen) → restored
+(819d7867), checked no other function was lost. CI 41340483938 GREEN (headSha 819d7867;
+warnings only the old ones). APK DriverLab-v0.1.1-819d7867.apk sha256
+a755c9fb73703fd43aeca3b1de7edb0c15781a8d30f2822f9d1a74ed8ae7ffae STAGED
+/sdcard/Download/DriverLab-test-tools-819d7867.apk (host == device). NOT installed.
+
 
 User: "do 1 and 2, and start the research for 4" + Hugo: remove the 500k list limit,
 add a multithread option; user: make results more fluid and organised.
