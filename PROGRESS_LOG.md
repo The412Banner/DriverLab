@@ -18,10 +18,28 @@ Started from vauzi's adreno_722_analysis.md and the adreno-cmdstream-gather APK.
 - Our own CTS build (vulkan-cts-1.4.7.1, CI run 41283089769) passes smoke,
   sampler, draw and info tests on both drivers.
 
-**Built:** 07061bcb (app + CI). CI run 41285265794.
+**Built:** 07061bcb (app + CI) → CI 41285265794 compiled first time but the
+v1 signature check failed (AGP drops v1 when minSdk >= 24). 62fb66cd: explicit
+apksigner v1+v2+v3 with the AOSP test key, CTS stdout line-buffered through the
+preloaded libdlrec, stall watchdog → **CI 41285602566 green** (Build APK 2m17s with
+Gradle cache, CTS/catalog restored from cache). APK DriverLab-v0.1-62fb66cd.apk,
+37 MB, sha256 12581c845061284873e16e2a85c12abedaf7773f283d624c04d0fd2bea205d73,
+com.driverlab 0.1 (versionCode 1), arm64, signer A4:0D:A8:0A…F5:DC.
 
-**Device test:** not yet. **Release:** v0.1 requested by the user; publish
-only after the APK is installed and checked.
+**Checked on the Duo (terminal, the APK's own libraries):** smoke.triangle Pass
+on the system driver with recording (18.5 KB .rd.gz, KGSL log) and on Turnip
+710-720-Test through libdlvkshim with FD_RD_DUMP (3.6 KB capture).
+
+**Staged:** /sdcard/Download/DriverLab-v0.1-62fb66cd.apk (+ .sha256), hash
+matches host and device. NOT installed, app UI NOT device-tested.
+
+**Release:** v0.1 requested by the user; publish after the user OKs the install
+and the app is checked on the device.
+
+**Resume:** ask user to install (pm install needs their yes); then test: setup
+screen, system probe, Quick check on system, import Turnip zip, Quick check on
+Turnip with recording, compare + register diff, Files tab, Download/DriverLab
+export. Then publish v0.1 via workflow_dispatch release=true tag=v0.1.
 
 ## Lessons learned (don't repeat these)
 - The Android linker namespace for executables only allows libraries under
