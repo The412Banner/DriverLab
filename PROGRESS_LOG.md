@@ -20,7 +20,14 @@ Session screen list button → dialog: pick result kinds (Failed + Crashed defau
 SessionStore.namesWith reads results.tsv fully (not the 50,000-pass-capped list).
 README updated. No local compile possible (no Android SDK here) → CI is the first compile.
 
-**CI:** 41333545214 (headSha b33343b0) running.
+**CI:** 41333545214 (headSha b33343b0) GREEN (all steps success; Kotlin warnings only
+in old code: Catalog.kt:193, RunManager.kt:320/445, FilesScreens.kt:156, ResultsScreens TabRow).
+APK DriverLab-v0.1-b33343b0.apk sha256 b164a4217f22f79ce6f9e49c7228d67296ac12e50d23c935a77157abd2857c67,
+STAGED /sdcard/Download/DriverLab-test-lists-b33343b0.apk (host == device). NOT installed.
+Test files (self-made) in /sdcard/Download/DriverLab-test/: caselist-test.txt (3 smoke
+tests incl. ",Fail"/" Pass" suffixes, dEQP-VK.info.*, test-clear, 1 bogus name),
+PocketFIT-own-driver-flat.zip + -subfolder.zip (this phone's own vendor driver + 11
+vendor libs + meta.json minApi 34), stevenmxz-849.zip (expect "made for a newer Android").
 
 **Next / resume:** CI green → v0.1.1-pre2 pre-release (user already asked for
 pre-releases for the Fold) only after the user OKs → device test: load a list,
