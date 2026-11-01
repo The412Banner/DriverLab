@@ -33,6 +33,8 @@ on the system driver with recording (18.5 KB .rd.gz, KGSL log) and on Turnip
 **Staged:** /sdcard/Download/DriverLab-v0.1-62fb66cd.apk (+ .sha256), hash
 matches host and device. NOT installed, app UI NOT device-tested.
 
+**Update 11-01 09:32 UTC:** user asked to match the original zip exactly + add explanations: 68 GLES programs, libwrap-format kernel log, (i) buttons, fixes for .log naming and driver version → b0f6b21a, CI 41288964290 green, APK DriverLab-v0.1-b0f6b21a.apk (sha256 fb78f384…) staged, awaiting install OK.
+
 **Release:** v0.1 requested by the user; publish after the user OKs the install
 and the app is checked on the device.
 
