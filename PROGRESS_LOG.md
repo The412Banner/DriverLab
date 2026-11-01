@@ -35,9 +35,11 @@ tap to expand. README + credit Hugo.
 OWN Qualcomm driver packed like a shared zip (vulkan.adreno.so + 11 vendor libs in
 a folder): old shim fails like Hugo's; new shim "opened 12 of the driver's own
 libraries" → info.device_properties PASS. 849 zip: clear per-library reasons.
-Quirk: loaded directly (new shim AND Hugo's LD_LIBRARY_PATH way) the driver names
-the GPU "Adreno (TM) 33" instead of "750" (same driver version) — not caused by
-the loader; open.
+GPU name: loaded directly, the driver says "Adreno (TM) 33"; through the system
+loader "Adreno (TM) 750". CORRECTION (user, same day): "33" is right — the Pocket
+FIT is a Snapdragon G3 Gen 3, kernel gpu_model = Adreno33v2; the system presents
+it as 750 via persist.sys.fake.gpu = "Adreno (TM) 750". Not a DriverLab problem;
+pre-release notes corrected.
 
 **CI:** 41328224928 (headSha 40595684) GREEN (all steps success; full CTS rebuild,
 new branch can't see feat/v0.1's cache). APK DriverLab-v0.1-40595684.apk sha256
