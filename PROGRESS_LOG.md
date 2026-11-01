@@ -2,6 +2,32 @@
 
 Newest first.
 
+## 2026-11-01 — DEVICE TEST of b33343b0 on the Pocket FIT (user OK to install; peers told + "done")
+
+Installed b33343b0 (base.apk sha256 b164a421… == staged), 13:04 EST.
+1. Import PocketFIT-own-driver-flat.zip → card loads: GPU "Adreno (TM) 33", Vulkan
+   1.3.128, 512.762.24, Library vulkan.adreno.so, "14 files · made for Android 14+". PASS
+2. Import stevenmxz-849.zip → "Could not load this driver" / "Probably made for a newer
+   Android than this phone's (Android 14)…" / libadreno_utils.so not found / "16 of the
+   driver's own libraries could not load" / "Tap to see all". PASS
+3. Import -subfolder.zip → loads, Library driver/vulkan.adreno.so. PASS
+4. Tests ⋮ Load test list caselist-test.txt → "27 tests selected from 6 names", missing
+   dEQP-VK.api.smoke.does_not_exist listed. PASS (wording "1 names are" to fix)
+5. Save test list → caselist.txt with the same 27 names. PASS
+6. Run 27 on System driver (recording on): 24 pass, 3 not supported, 9.8 s. PASS
+7. Result list button: ticked Not supported → Save file = those 3 names; Select to run →
+   selection 3, label "Failed + crashed + not supported · System driver"; BUG: stayed on
+   the session screen (goTab restoreState brings back the Tests tab's saved stack, which
+   held run → session). Ran the 3 on the imported own driver: session log shows
+   "opened 12 of the driver's own libraries, 0 could not load" + "loaded HAL driver:
+   Vulkan QTI" ×6, results NotSupported ×3 (same as system). PASS
+No FATAL/ANR/crash-buffer entries; app pid unchanged all test. System driver set back
+in use, Termux brought back. (DocumentsUI needed a media scan to list a .txt made from
+the terminal — test setup only.)
+
+**To fix:** Select to run → open Tests fresh; "1 name is"; androidName below API 29
+(27 → "8.1"); Drivers screen help text still says only "(meta.json + .so)".
+
 ## 2026-11-01 — test lists (caselist.txt) + "save failed tests" (fix/blob-driver-zips, CI running, NOT device-tested)
 
 **Why:** Hugo (Discord 12:44 EST, after "Nice, it works" on v0.1.1-pre1 — his
