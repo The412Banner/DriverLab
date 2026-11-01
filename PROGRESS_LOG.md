@@ -2,6 +2,15 @@
 
 Newest first.
 
+## 2026-11-01 — pre2 (b792de2a) INSTALLED on the Pocket FIT (user: "install it")
+
+base.apk sha256 d240ab7b… == staged, lastUpdateTime 14:55:11 local. Opens. Found my earlier
+"restore" had put "Pocket FIT own Qualcomm driver (test)" in use (Drivers list was scrolled,
+tapped the wrong card's Use) → fixed: System driver in use; verified in shared_prefs
+settings.xml: driverId=system, record=true, jobs=1. Quick check with recording: 152 tests in
+24.9 s, 123/2/27 (same as before), 152 captures, no crash-buffer lines, no FATAL/ANR.
+Peer root-9c told + "done". Lesson: verify restored settings from settings.xml, not a tap.
+
 ## 2026-11-01 — read-error fix b792de2a, v0.1.2-pre2 published (feat/test-tools)
 
 Fix: output IOException in runBatch / runGles / feature check → current test Crash with the
