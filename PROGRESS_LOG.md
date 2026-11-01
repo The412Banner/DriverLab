@@ -2,6 +2,14 @@
 
 Newest first.
 
+## 2026-11-01 — test leftovers cleaned up on the Pocket FIT (user picked the scope)
+
+Removed from the app: test drivers (two "Pocket FIT own Qualcomm driver (test)" copies,
+qcom-849) and the 15 test sessions from 13:10–15:08; kept System driver, Banners-Turnip r4,
+the user's 04:04 and 04:26 sessions. Deleted Download/DriverLab-test, the 45 export files of
+those runs (kept 04-04-33 and 04-26-49), the old staged DriverLab APKs (kept
+DriverLab-v0.1.2-91ee8c28.apk) and the terminal test folder ~/driverlab-fit.
+
 ## 2026-11-01 — v0.1.2 release APK INSTALLED on the Pocket FIT (user: "install 0.1.2 on the pocket fit")
 
 Staged /sdcard/Download/DriverLab-v0.1.2-91ee8c28.apk (release asset, sha256 761a0683… host ==
