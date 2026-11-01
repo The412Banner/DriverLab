@@ -28,6 +28,9 @@ the terminal — test setup only.)
 **To fix:** Select to run → open Tests fresh; "1 name is"; androidName below API 29
 (27 → "8.1"); Drivers screen help text still says only "(meta.json + .so)".
 
+**Fixed (bdaaf3ba):** goTab(fresh = true) for Select to run; "1 name is"; androidName
+21–28; Drivers help text. CI 41335618122 (headSha bdaaf3ba) running. NOT device-tested.
+
 ## 2026-11-01 — test lists (caselist.txt) + "save failed tests" (fix/blob-driver-zips, CI running, NOT device-tested)
 
 **Why:** Hugo (Discord 12:44 EST, after "Nice, it works" on v0.1.1-pre1 — his
