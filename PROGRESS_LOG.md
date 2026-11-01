@@ -2,6 +2,20 @@
 
 Newest first.
 
+## 2026-11-01 — read-error fix b792de2a, v0.1.2-pre2 published (feat/test-tools)
+
+Fix: output IOException in runBatch / runGles / feature check → current test Crash with the
+reason, process ended if alive, batch restarts, run continues; verdict text shows "not
+reported" next to "missing". CI 41343599390 GREEN (headSha b792de2a). APK
+DriverLab-v0.1.1-b792de2a.apk sha256 d240ab7bf81d7c9d33bde65720758a61ef2259f229db21a30cdf2b0e6e4c7191,
+staged /sdcard/Download/DriverLab-test-tools-b792de2a.apk (host == device), NOT installed.
+User: "publish it as test build 2 when it's green" →
+https://github.com/The412Banner/DriverLab/releases/tag/v0.1.2-pre2 — tag → b792de2af4f65f30d0f3ff62fa62324623c9003f,
+Pre-release (v0.1.1 stays Latest), downloaded back = same hash. NOT device-tested (the fix
+can't be forced; it shows only if the read error happens again).
+Next: user tests on the Fold; merge feat/test-tools → main = user's go (backup ref first);
+stable 0.1.2 = user's word. Trace replay research done (stage 0 not started).
+
 ## 2026-11-01 — DEVICE TEST 819d7867 on the Pocket FIT (v0.1.2-pre1 published first; user yes to both)
 
 Installed 819d7867 (base.apk sha256 a755c9fb… == staged), 14:23 local. Peer root-9c held; "done" sent.
