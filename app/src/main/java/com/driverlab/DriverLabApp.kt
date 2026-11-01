@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import com.driverlab.core.Catalog
 import com.driverlab.core.CtsSetup
 import com.driverlab.core.DriverRepository
+import com.driverlab.core.FlagCheck
 import com.driverlab.core.RunManager
 import com.driverlab.core.SelectionStore
 import com.driverlab.core.SessionStore
@@ -54,6 +55,8 @@ object AppGraph {
         private set
     lateinit var runs: RunManager
         private set
+    lateinit var flagCheck: FlagCheck
+        private set
 
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -66,6 +69,7 @@ object AppGraph {
         drivers = DriverRepository(a)
         sessions = SessionStore(a)
         runs = RunManager(a, drivers, selection, sessions, setup)
+        flagCheck = FlagCheck(a, drivers, settings, scope)
         scope.launch(Dispatchers.IO) {
             catalog.loadIndex()
             drivers.reload()

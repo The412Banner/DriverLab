@@ -43,6 +43,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -72,6 +73,8 @@ import com.driverlab.AppGraph
 import com.driverlab.core.Bucket
 import com.driverlab.core.Counts
 import com.driverlab.core.Fmt
+import com.driverlab.core.isGles
+import com.driverlab.core.FlagCheck
 import com.driverlab.core.TestList
 import com.driverlab.core.Qpa
 import com.driverlab.core.RdCapture
@@ -425,6 +428,13 @@ fun TestDetailScreen(nav: NavHostController, id: String, name: String) {
                     if (r.message.isNotEmpty()) { Spacer(Modifier.height(8.dp)); Text(r.message, style = MaterialTheme.typography.bodyMedium) }
                     Spacer(Modifier.height(6.dp))
                     SelectionContainer { Text(name, style = MonoSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    val runDriver = AppGraph.sessions.get(id)?.let { AppGraph.drivers.get(it.driverId) }
+                    if (runDriver != null && FlagCheck.isTurnip(runDriver) && !isGles(name) &&
+                        (r.status.bucket == Bucket.FAILED || r.status.bucket == Bucket.CRASHED)
+                    ) {
+                        Spacer(Modifier.height(8.dp))
+                        FilledTonalButton(onClick = { nav.navigate(route("flags", id, name)) }) { Text("Find a setting that fixes it") }
+                    }
                 }
             }
             val tabs = listOfNotNull("Log", "CTS log", if (capture != null) "Registers" else null)

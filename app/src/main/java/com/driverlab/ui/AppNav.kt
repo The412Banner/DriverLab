@@ -120,6 +120,9 @@ fun DriverLabRoot() {
                 composable("test/{id}/{name}", listOf(navArgument("id") { type = NavType.StringType }, navArgument("name") { type = NavType.StringType })) {
                     TestDetailScreen(nav, it.arguments?.getString("id").orEmpty(), it.arguments?.getString("name").orEmpty())
                 }
+                composable("flags/{id}/{name}", listOf(navArgument("id") { type = NavType.StringType }, navArgument("name") { type = NavType.StringType })) {
+                    FlagCheckScreen(nav, it.arguments?.getString("id").orEmpty(), it.arguments?.getString("name").orEmpty())
+                }
                 composable("compare/{a}/{b}", listOf(navArgument("a") { type = NavType.StringType }, navArgument("b") { type = NavType.StringType })) {
                     CompareScreen(nav, it.arguments?.getString("a").orEmpty(), it.arguments?.getString("b").orEmpty())
                 }
