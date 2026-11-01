@@ -120,6 +120,7 @@ fun DriverLabRoot() {
                 composable("test/{id}/{name}", listOf(navArgument("id") { type = NavType.StringType }, navArgument("name") { type = NavType.StringType })) {
                     TestDetailScreen(nav, it.arguments?.getString("id").orEmpty(), it.arguments?.getString("name").orEmpty())
                 }
+                composable("features") { GameFeaturesScreen(nav) }
                 composable("flags/{id}/{name}", listOf(navArgument("id") { type = NavType.StringType }, navArgument("name") { type = NavType.StringType })) {
                     FlagCheckScreen(nav, it.arguments?.getString("id").orEmpty(), it.arguments?.getString("name").orEmpty())
                 }

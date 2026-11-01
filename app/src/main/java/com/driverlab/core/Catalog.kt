@@ -253,6 +253,27 @@ class Catalog(private val context: Context) {
 
     suspend fun exists(path: String): Boolean = path == ROOT || testsUnder(path) > 0
 
+    /** Every test (leaf) at or under a group path; with [contains], only tests whose last name part contains it. */
+    suspend fun leavesUnder(path: String, contains: String? = null): List<String> {
+        val top = topOf(path) ?: return emptyList()
+        if (tops.none { it.name == top }) return emptyList()
+        val t = tree(top)
+        val start = t.find(path)
+        if (start < 0) return emptyList()
+        val out = ArrayList<String>()
+        val stack = ArrayDeque<Int>()
+        stack.addLast(start)
+        while (stack.isNotEmpty()) {
+            val n = stack.removeLast()
+            if (t.isLeaf(n)) {
+                if (contains == null || t.name(n).contains(contains)) out += t.path(n)
+            } else {
+                for (c in t.children(n).reversed()) stack.addLast(c)
+            }
+        }
+        return out
+    }
+
     /**
      * Search group and test names. A plain word matches any name segment; text
      * with dots matches inside full test names. Calls [onHit] until [limit].

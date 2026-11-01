@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeveloperBoard
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -84,7 +85,11 @@ fun DriversScreen(nav: NavHostController) {
         }
     }
     Scaffold(
-        topBar = { AppBar("Drivers", subtitle = "System driver and imported Vulkan drivers") },
+        topBar = {
+            AppBar("Drivers", subtitle = "System driver and imported Vulkan drivers", actions = {
+                IconButton(onClick = { nav.navigate("features") }) { Icon(Icons.Filled.SportsEsports, "Game features") }
+            })
+        },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { picker.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "application/x-sharedlib", "*/*")) },

@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.ClearAll
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
@@ -152,6 +153,11 @@ fun TestsScreen(nav: NavHostController) {
                                 text = { Text("Load test list…") },
                                 leadingIcon = { Icon(Icons.Filled.FileOpen, null) },
                                 onClick = { menu = false; loadList.launch(arrayOf("text/*", "application/octet-stream")) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Game features…") },
+                                leadingIcon = { Icon(Icons.Filled.SportsEsports, null) },
+                                onClick = { menu = false; nav.navigate("features") },
                             )
                             DropdownMenuItem(
                                 text = { Text("Save test list…") },
