@@ -82,29 +82,25 @@ class DriverRepository(private val context: Context) {
                 val isZip = head[0] == 'P'.code.toByte() && head[1] == 'K'.code.toByte()
                 var meta: JSONObject? = null
                 var libName: String
+                var fileCount = 1
                 if (isZip) {
-                    val sos = ArrayList<String>()
-                    cr.openInputStream(uri)!!.use { input ->
-                        ZipInputStream(input.buffered()).use { zip ->
-                            while (true) {
-                                val e = zip.nextEntry ?: break
-                                if (e.isDirectory) continue
-                                val base = e.name.substringAfterLast('/')
-                                when {
-                                    base == "meta.json" -> meta = JSONObject(zip.readBytes().decodeToString())
-                                    base.endsWith(".so") -> {
-                                        File(dir, base).outputStream().use { zip.copyTo(it) }
-                                        sos += base
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    // Every file is kept at its path: drivers taken from phones come with the
+                    // libraries they need (libgsl.so, libllvm-glnext.so, ...).
+                    val files = unzipAll(cr, uri, dir)
+                    fileCount = files.size
+                    val metaPath = files.filter { it.substringAfterLast('/') == "meta.json" }.minByOrNull { it.count { c -> c == '/' } }
+                    meta = metaPath?.let { runCatching { JSONObject(File(dir, it).readText()) }.getOrNull() }
+                    val sos = files.filter { it.endsWith(".so") }
                     require(sos.isNotEmpty()) { "No .so file in the zip." }
                     val wanted = meta?.optString("libraryName").orEmpty()
-                    libName = if (wanted.isNotEmpty() && wanted in sos) wanted else sos.first()
+                    val metaDir = metaPath?.substringBeforeLast('/', "").orEmpty()
+                    val wantedPath = if (metaDir.isEmpty()) wanted else "$metaDir/$wanted"
+                    libName = sos.firstOrNull { wanted.isNotEmpty() && it == wantedPath }
+                        ?: sos.firstOrNull { wanted.isNotEmpty() && it.substringAfterLast('/') == wanted }
+                        ?: sos.firstOrNull { it.substringAfterLast('/').let { b -> b.startsWith("vulkan.") || b.startsWith("libvulkan") } }
+                        ?: sos.first()
                 } else {
-                    libName = if (displayName.endsWith(".so")) displayName else "libvulkan_custom.so"
+                    libName = if (displayName.endsWith(".so")) displayName.substringAfterLast('/') else "libvulkan_custom.so"
                     cr.openInputStream(uri)!!.use { input -> File(dir, libName).outputStream().use { input.copyTo(it) } }
                 }
                 checkElf(File(dir, libName))
@@ -120,6 +116,8 @@ class DriverRepository(private val context: Context) {
                     importedAt = System.currentTimeMillis(),
                     env = "",
                     probe = null,
+                    minApi = m?.optInt("minApi", 0) ?: 0,
+                    fileCount = fileCount,
                 )
                 save(d)
                 d
@@ -128,6 +126,40 @@ class DriverRepository(private val context: Context) {
                 throw e
             }
         }
+    }
+
+    /** Extracts every file of the zip into [dir], keeping folders. Returns the relative paths. */
+    private fun unzipAll(cr: android.content.ContentResolver, uri: Uri, dir: File): List<String> {
+        val base = dir.canonicalFile
+        val out = ArrayList<String>()
+        var total = 0L
+        cr.openInputStream(uri)!!.use { input ->
+            ZipInputStream(input.buffered()).use { zip ->
+                while (true) {
+                    val e = zip.nextEntry ?: break
+                    val name = e.name.replace('\\', '/').trimStart('/')
+                    if (e.isDirectory || name.isEmpty() || name.endsWith("/")) continue
+                    val target = File(base, name).canonicalFile
+                    require(target.path.startsWith(base.path + File.separator)) { "Unsafe path in the zip: ${e.name}" }
+                    val rel = target.path.removePrefix(base.path + File.separator)
+                    require(rel != DRIVER_JSON) { "The zip has its own $DRIVER_JSON; DriverLab needs that name." }
+                    require(out.size < MAX_FILES) { "The zip has more than $MAX_FILES files." }
+                    target.parentFile?.mkdirs()
+                    target.outputStream().use { o ->
+                        val buf = ByteArray(64 * 1024)
+                        while (true) {
+                            val n = zip.read(buf)
+                            if (n < 0) break
+                            total += n
+                            require(total <= MAX_BYTES) { "The zip unpacks to more than ${MAX_BYTES shr 20} MB." }
+                            o.write(buf, 0, n)
+                        }
+                    }
+                    if (rel !in out) out += rel
+                }
+            }
+        }
+        return out
     }
 
     private fun checkElf(f: File) {
@@ -163,7 +195,7 @@ class DriverRepository(private val context: Context) {
             val msg = when {
                 !finished -> "The driver did not answer within 60 s."
                 passed -> "OK"
-                else -> text.lines().filter { it.isNotBlank() }.takeLast(6).joinToString("\n")
+                else -> failureMessage(text, d)
             }
             val info = Qpa.probe(qpa, passed, msg)
             save(d.copy(probe = info, version = d.version.ifEmpty { info.driverVersion }))
@@ -178,10 +210,63 @@ class DriverRepository(private val context: Context) {
     }
 
     companion object {
+        private const val DRIVER_JSON = "driver.json"
+        private const val MAX_FILES = 4000
+        private const val MAX_BYTES = 2L shl 30
+
+        /**
+         * Other folders of an imported driver that hold .so files, for the loader to search after
+         * the driver's own folder (zips that keep their libraries in subfolders).
+         */
+        fun extraLibDirs(driverDir: File, lib: File): List<File> =
+            driverDir.walkTopDown().maxDepth(6)
+                .filter { it.isDirectory && it != lib.parentFile && it.listFiles()?.any { f -> f.isFile && f.name.endsWith(".so") } == true }
+                .toList()
+
+        fun androidName(api: Int): String = when (api) {
+            in 0..28 -> "API $api"
+            29 -> "10"; 30 -> "11"; 31 -> "12"; 32 -> "12L"; 33 -> "13"; 34 -> "14"
+            35 -> "15"; 36 -> "16"; 37 -> "17"
+            else -> "API $api"
+        }
+
+        /** The reason a probe failed, most useful line first (the full output stays in the run logs). */
+        fun failureMessage(output: String, d: DriverInfo): String {
+            val lines = output.lines().map { it.trimEnd() }.filter { it.isNotBlank() }
+            val shim = lines.filter { it.startsWith("DRIVERLAB_SHIM:") }
+                .map { it.removePrefix("DRIVERLAB_SHIM:").trim().replace("dlopen failed: dlopen failed:", "dlopen failed:") }
+            val fatal = shim.lastOrNull {
+                it.startsWith("dlopen failed") || it.startsWith("driver exports neither") ||
+                    it.startsWith("HMI is not") || it.startsWith("HAL open") || it.startsWith("DRIVERLAB_VK_DRIVER")
+            }
+            val ownFailed = shim.filter { it.startsWith("driver's copy of") }
+            val tooNew = ownFailed.any { "cannot locate symbol" in it }
+            val out = ArrayList<String>()
+            val here = android.os.Build.VERSION.RELEASE
+            if (fatal != null && d.needsNewerAndroid) {
+                out += "Made for Android ${androidName(d.minApi)} or newer; this phone has Android $here."
+            } else if (tooNew) {
+                // Their libraries ask the phone's C++ library for functions it doesn't have.
+                out += "Probably made for a newer Android than this phone's (Android $here): " +
+                    "some of its own libraries can't load here."
+            }
+            if (fatal != null) out += fatal
+            if (ownFailed.isNotEmpty()) {
+                out += "${ownFailed.size} of the driver's own libraries could not load:"
+                out += ownFailed.take(4)
+            }
+            if (out.isEmpty()) {
+                out += lines.filterNot { it.startsWith("Writing test log") || it.startsWith("dEQP Core") || it.startsWith("  target implementation") }
+                    .takeLast(6)
+            }
+            return out.joinToString("\n").ifBlank { "The test program stopped without a result." }
+        }
+
         fun toJson(d: DriverInfo): JSONObject = JSONObject().apply {
             put("id", d.id); put("name", d.name); put("description", d.description)
             put("author", d.author); put("version", d.version); put("vendor", d.vendor)
             put("libName", d.libName); put("importedAt", d.importedAt); put("env", d.env)
+            put("minApi", d.minApi); put("fileCount", d.fileCount)
             d.probe?.let { p ->
                 put("probe", JSONObject().apply {
                     put("ok", p.ok); put("deviceName", p.deviceName); put("apiVersion", p.apiVersion)
@@ -201,6 +286,8 @@ class DriverRepository(private val context: Context) {
             libName = o.optString("libName"),
             importedAt = o.optLong("importedAt"),
             env = o.optString("env"),
+            minApi = o.optInt("minApi", 0),
+            fileCount = o.optInt("fileCount", 0),
             probe = o.optJSONObject("probe")?.let { p ->
                 ProbeInfo(
                     p.optBoolean("ok"), p.optString("deviceName"), p.optString("apiVersion"),

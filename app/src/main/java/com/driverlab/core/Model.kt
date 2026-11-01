@@ -94,8 +94,14 @@ data class DriverInfo(
     val importedAt: Long,
     val env: String,
     val probe: ProbeInfo?,
+    /** Lowest Android API level the driver package says it needs (meta.json "minApi"), 0 = not given. */
+    val minApi: Int = 0,
+    /** Number of files that came with the driver (its own libraries etc.). */
+    val fileCount: Int = 0,
 ) {
     val isSystem: Boolean get() = id == SYSTEM_ID
+    /** The package says it needs a newer Android than this phone has. */
+    val needsNewerAndroid: Boolean get() = minApi > android.os.Build.VERSION.SDK_INT
 
     companion object {
         const val SYSTEM_ID = "system"

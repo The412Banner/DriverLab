@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -55,6 +56,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import com.driverlab.AppGraph
 import com.driverlab.core.DriverInfo
+import com.driverlab.core.DriverRepository
 import com.driverlab.core.Fmt
 import com.driverlab.ui.theme.LocalStatusColors
 import com.driverlab.ui.theme.MonoSmall
@@ -194,9 +196,30 @@ private fun DriverCard(
                     if (!d.isSystem) InfoLine("Library", d.libName, mono = true)
                 }
                 else -> Column {
+                    var expanded by remember(d.probe.checkedAt) { mutableStateOf(false) }
                     Text("Could not load this driver", style = MaterialTheme.typography.bodyMedium, color = status.failed)
-                    Text(d.probe.message, style = MonoSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 6, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        d.probe.message,
+                        style = MonoSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = if (expanded) Int.MAX_VALUE else 6,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.clickable { expanded = !expanded },
+                    )
+                    if (!expanded && d.probe.message.length > 240) {
+                        Text("Tap to see all", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clickable { expanded = true })
+                    }
                 }
+            }
+            if (!d.isSystem && (d.needsNewerAndroid || d.fileCount > 1)) {
+                Spacer(Modifier.height(6.dp))
+                val parts = buildList {
+                    if (d.fileCount > 1) add("${d.fileCount} files")
+                    if (d.minApi > 0) add("made for Android ${DriverRepository.androidName(d.minApi)}+")
+                }
+                Text(parts.joinToString(" · "), style = MaterialTheme.typography.labelSmall,
+                    color = if (d.needsNewerAndroid) status.failed else MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (d.env.isNotBlank()) {
                 Spacer(Modifier.height(6.dp))

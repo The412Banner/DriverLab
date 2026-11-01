@@ -32,6 +32,11 @@ is loaded only inside DriverLab's own test program. No root needed.
 - **Drivers:** import a zip or `.so`. DriverLab checks it right away
   (GPU name, Vulkan version, driver version). Each driver can have its own
   settings, such as `TU_DEBUG=sysmem`.
+  - Qualcomm drivers taken from other phones (shared as AdrenoTools zips
+    with their own `libgsl.so`, `libllvm-glnext.so` and so on) work too: every
+    file in the zip is kept, and the driver's own libraries are loaded from
+    its folder. Many of these were built for Android 15 or newer and can't
+    load on older Android; the driver card then says so.
 - **Running:** a live screen shows progress, pass/fail counters, speed and
   time left. Runs keep going with the screen off. A test that crashes or
   hangs is marked as such, and the run continues.
@@ -65,7 +70,7 @@ choose **Capture set**, keep **System driver**, turn on
 | Part | What it is |
 |---|---|
 | `libdeqp_vk.so` | the Vulkan CTS, built as an Android program with the NDK (`cts/build-cts.sh`) |
-| `libdlvkshim.so` | lets the CTS load a custom driver: Android HAL (`HMI`) or loader ICD (`native/vkshim`) |
+| `libdlvkshim.so` | lets the CTS load a custom driver: Android HAL (`HMI`) or loader ICD, plus the libraries shipped with it (`native/vkshim`) |
 | `libdlrec.so` | records the device driver's GPU submits as `.rd` and logs its kernel calls (`native/dlrec`) |
 | `libtest_*.so` | the OpenGL ES test programs (`native/gles`, freedreno sources) |
 | test catalog | a compact index of the CTS test list (`tools/make_catalog.py`) |
@@ -83,5 +88,7 @@ AOSP test key (v1, v2 and v3).
   programs, the `.rd` format and libwrap, the register database, and
   Turnip's `FD_RD_DUMP` (MIT).
 - Huggo: the adreno-cmdstream-gather app.
+- Hugo: the report and fix idea for loading Qualcomm drivers taken from
+  other phones.
 - vauzi (Vauzi-17): for sharing that app and for the Adreno 710/720/722
   register work that started DriverLab.

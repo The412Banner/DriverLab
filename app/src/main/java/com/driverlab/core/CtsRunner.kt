@@ -8,7 +8,8 @@ import java.io.File
  *
  * System driver: the normal Android Vulkan loader; recording via LD_PRELOAD of
  * libdlrec.so. Custom driver: --deqp-vk-library-path=libdlvkshim.so, which
- * loads the driver .so named in DRIVERLAB_VK_DRIVER; recording via Mesa's own
+ * loads the driver .so named in DRIVERLAB_VK_DRIVER (after the libraries shipped
+ * with it, see native/vkshim); recording via Mesa's own
  * FD_RD_DUMP (Turnip and other freedreno builds).
  */
 class CtsRunner(private val context: Context) {
@@ -75,6 +76,10 @@ class CtsRunner(private val context: Context) {
         if (!l.driver.isSystem && l.driverLib != null) {
             env["DRIVERLAB_VK_DRIVER"] = l.driverLib.absolutePath
             env["MESA_SHADER_CACHE_DIR"] = File(cache, "mesa").apply { mkdirs() }.absolutePath
+            // The shim opens the libraries shipped with the driver from its folder (and these
+            // subfolders). Not LD_LIBRARY_PATH: that would also replace the CTS's own system libraries.
+            val extra = DriverRepository.extraLibDirs(File(Paths.drivers(context), l.driver.id), l.driverLib)
+            if (extra.isNotEmpty()) env["DRIVERLAB_VK_LIBDIRS"] = extra.joinToString(":") { it.absolutePath }
         }
         for ((k, v) in parseEnv(l.driver.env)) env[k] = v
         if (l.record) {
