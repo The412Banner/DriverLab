@@ -35,6 +35,19 @@ matches host and device. NOT installed, app UI NOT device-tested.
 
 **Update 11-01 09:32 UTC:** user asked to match the original zip exactly + add explanations: 68 GLES programs, libwrap-format kernel log, (i) buttons, fixes for .log naming and driver version → b0f6b21a, CI 41288964290 green, APK DriverLab-v0.1-b0f6b21a.apk (sha256 fb78f384…) staged, awaiting install OK.
 
+**Device test 2 (b0f6b21a, user OK):** Capture set on the Qualcomm driver with
+recording: 117 tests (68 GLES + 49 VK) in 4m04s; test_results zip 234 files vs
+the original 236 (7 VK renamed by CTS 1.4.7.1, 3 removed); the GLES failures are
+identical to the original app's logs; test-tex-layout segfaults in both. ⓘ
+dialogs, driver picker, Results filters, Compare, register diff and Files tab
+DEVICE-PROVEN; no app crash. Fixes after it: exit(-1)=Fail (not Crash), no
+duplicate export zips in app storage → f0be2226 (CI 41289826815).
+
+**Release candidate:** e26682e1 (release notes) CI 41290089892 green,
+DriverLab-v0.1-e26682e1.apk sha256 2cf7729877e999b507930cfe4027ce16b7818a414d2650b3e5d3be7680c0161e,
+staged in Download. Plan: user OK → install + quick check → `gh release create v0.1`
+with exactly this APK, --target e26682e10cc3d1380d6f488d0d7209939bec1a33.
+
 **Release:** v0.1 requested by the user; publish after the user OKs the install
 and the app is checked on the device.
 
