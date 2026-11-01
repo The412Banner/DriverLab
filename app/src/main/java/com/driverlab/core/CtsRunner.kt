@@ -56,7 +56,9 @@ class CtsRunner(private val context: Context) {
         val cache = File(context.cacheDir, "deqp").apply { mkdirs() }
         env["HOME"] = cache.absolutePath
         env["TMPDIR"] = cache.absolutePath
-        env.remove("LD_PRELOAD")
+        // Always preloaded: makes the CTS output line-buffered; records only when DLREC_PATH is set.
+        env["LD_PRELOAD"] = Paths.recorder(context).absolutePath
+        env.remove("DLREC_PATH")
         if (!l.driver.isSystem && l.driverLib != null) {
             env["DRIVERLAB_VK_DRIVER"] = l.driverLib.absolutePath
             env["MESA_SHADER_CACHE_DIR"] = File(cache, "mesa").apply { mkdirs() }.absolutePath
@@ -64,7 +66,6 @@ class CtsRunner(private val context: Context) {
         for ((k, v) in parseEnv(l.driver.env)) env[k] = v
         if (l.record) {
             if (l.driver.isSystem) {
-                env["LD_PRELOAD"] = Paths.recorder(context).absolutePath
                 l.captureFile?.let { env["DLREC_PATH"] = it.absolutePath }
                 l.recorderLog?.let { env["DLREC_LOG"] = it.absolutePath }
                 env["DLREC_BUF_CAP"] = l.captureCapBytes.toString()

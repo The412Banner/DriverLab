@@ -313,13 +313,19 @@ class RunManager(
                 val timedOut = AtomicBoolean(false)
                 val shim = ArrayList<String>()
                 val timeoutMs = req.timeoutSec * 1000L
+                val lastLine = java.util.concurrent.atomic.AtomicLong(System.currentTimeMillis())
                 val watchdog = Thread {
                     try {
                         while (true) {
                             Thread.sleep(250)
+                            val now = System.currentTimeMillis()
                             val c = current
-                            if (c != null && timeoutMs > 0 && System.currentTimeMillis() - currentSince > timeoutMs) {
+                            if (c != null && timeoutMs > 0 && now - currentSince > timeoutMs) {
                                 timedOut.set(true); p.destroyForcibly(); break
+                            }
+                            // Silent with no test running (stuck while starting up or between tests).
+                            if (c == null && timeoutMs > 0 && now - lastLine.get() > timeoutMs + 30_000) {
+                                p.destroyForcibly(); break
                             }
                             if (!p.isAlive) break
                         }
@@ -351,6 +357,7 @@ class RunManager(
                     p.inputStream.bufferedReader().use { rd ->
                         while (true) {
                             val line = rd.readLine() ?: break
+                            lastLine.set(System.currentTimeMillis())
                             w.write(line); w.write("\n")
                             tail.addLast(line); if (tail.size > 12) tail.removeFirst()
                             when (val parsed = CtsRunner.parse(line)) {

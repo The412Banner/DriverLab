@@ -111,12 +111,18 @@ jobs:
       - name: Build APK
         run: ./gradlew :app:assembleRelease --build-cache --stacktrace
 
-      - name: Verify signature (v1 + v2 + v3, AOSP test key)
+      # AGP leaves out the v1 (JAR) signature when minSdk >= 24, so sign
+      # explicitly with v1 + v2 + v3 using the same public AOSP test key.
+      - name: Sign (v1 + v2 + v3, AOSP test key) and verify
         run: |
           set -e
           BT="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
-          APK=app/build/outputs/apk/release/app-release.apk
-          "$BT/apksigner" verify --verbose --print-certs --min-sdk-version 24 "$APK" | tee verify.txt
+          IN=app/build/outputs/apk/release/app-release.apk
+          APK=app/build/outputs/apk/release/app-release-signed.apk
+          "$BT/apksigner" sign --ks keystore/testkey.p12 --ks-pass pass:android --ks-key-alias testkey --key-pass pass:android \
+            --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --min-sdk-version 23 \
+            --out "$APK" "$IN"
+          "$BT/apksigner" verify --verbose --print-certs --min-sdk-version 23 "$APK" | tee verify.txt
           grep -q "Verified using v1 scheme (JAR signing): true" verify.txt
           grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" verify.txt
           grep -q "Verified using v3 scheme (APK Signature Scheme v3): true" verify.txt
@@ -131,7 +137,7 @@ jobs:
           SHA=${GITHUB_SHA::8}
           NAME="DriverLab-v${VER}-${SHA}.apk"
           mkdir -p dist
-          cp app/build/outputs/apk/release/app-release.apk "dist/$NAME"
+          cp app/build/outputs/apk/release/app-release-signed.apk "dist/$NAME"
           (cd dist && sha256sum "$NAME" > "$NAME.sha256" && cat "$NAME.sha256")
           ls -la dist
           echo "name=$NAME" >> "$GITHUB_OUTPUT"

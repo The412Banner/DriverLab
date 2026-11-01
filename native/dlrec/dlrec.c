@@ -8,6 +8,8 @@
 // the file format), it never changes the driver's requests: buffer flags are
 // left alone and GPU addresses are looked up with GPUOBJ_INFO when needed.
 //
+// It also makes stdout line-buffered in every process it is loaded into.
+//
 // Environment:
 //   DLREC_PATH     output file (.rd.gz); recording is off when unset
 //   DLREC_BUF_CAP  skip buffers larger than this many bytes unless they hold
@@ -278,6 +280,15 @@ static void write_header(void)
     sect(RD_CHIP_ID, &g_chip_id, sizeof(g_chip_id));
     sect(RD_GPU_ID, &g_gpu_id, sizeof(g_gpu_id));
     g_header_written = 1;
+}
+
+/* The CTS prints progress with stdio but never flushes it, so through a pipe
+ * its "Test case ..." lines arrive in blocks. DriverLab preloads this library
+ * into every CTS run (recording or not) to make stdout line-buffered. */
+__attribute__((constructor))
+static void dlrec_line_buffered_stdout(void)
+{
+    setvbuf(stdout, NULL, _IOLBF, 0);
 }
 
 /* Only "is kgsl" is cached, and it is re-checked before use in mmap(),
