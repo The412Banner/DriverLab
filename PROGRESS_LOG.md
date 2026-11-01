@@ -39,7 +39,19 @@ Quirk: loaded directly (new shim AND Hugo's LD_LIBRARY_PATH way) the driver name
 the GPU "Adreno (TM) 33" instead of "750" (same driver version) — not caused by
 the loader; open.
 
-**CI:** 41328224928 (headSha 40595684) running.
+**CI:** 41328224928 (headSha 40595684) GREEN (all steps success; full CTS rebuild,
+new branch can't see feat/v0.1's cache). APK DriverLab-v0.1-40595684.apk sha256
+9a02e9c655f54c952328fadc7663b56bfe9b213dbee02f752187ae8cb608e21a; its
+libdlvkshim.so re-run in the terminal = same results (own driver PASS, 849 clear reason).
+
+**Pre-release (user: "publish it as a pre-release so I can test on the fold"):**
+https://github.com/The412Banner/DriverLab/releases/tag/v0.1.1-pre1 — tag →
+405956847616122f3d603f98a02d1364dc723750, Pre-release (v0.1 stays Latest), APK +
+.sha256, downloaded back = same hash. Also staged on the Pocket FIT as
+Download/DriverLab-blob-driver-zips-40595684.apk (hash host == device), NOT installed.
+User tests on the Galaxy Fold 8: import 849/842.13 (+others), screenshot cards,
+Driver info + Quick check on each loaded driver and the System driver, Record off,
+send result screens + Download/DriverLab/<date>/<time>_<driver>.zip.
 
 **Next / resume:** CI green → stage APK in Download (sha256 host+device) → ask
 user to install on the Pocket FIT (import the own-driver zip + 849, check card
