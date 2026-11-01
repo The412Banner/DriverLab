@@ -20,29 +20,42 @@ env:
   NDK_VERSION: 29.0.14206865
   DE_ANDROID_API: "30"
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  cts:
-    name: Vulkan CTS (deqp-vk, Android arm64)
+  build:
+    name: CTS + native + APK
     runs-on: ubuntu-24.04
     timeout-minutes: 355
     steps:
       - uses: actions/checkout@v4
 
+      # 1. Vulkan CTS (about 20 min to build, so it is cached by tag + NDK + API + script).
       - name: Restore CTS bundle
-        id: cache
+        id: cts
         uses: actions/cache@v4
         with:
           path: cts-out
           key: cts-${{ env.CTS_TAG }}-ndk${{ env.NDK_VERSION }}-api${{ env.DE_ANDROID_API }}-${{ hashFiles('cts/build-cts.sh') }}
 
+      # 2. Small native libraries (shim + recorder), cached by their sources.
+      - name: Restore native libraries
+        id: native
+        uses: actions/cache@v4
+        with:
+          path: native-out
+          key: native-${{ env.NDK_VERSION }}-api${{ env.DE_ANDROID_API }}-${{ hashFiles('native/**') }}
+
       - name: Free disk space
-        if: steps.cache.outputs.cache-hit != 'true'
+        if: steps.cts.outputs.cache-hit != 'true'
         run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk/2* /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL || true
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL || true
           df -h /
 
-      - name: Install NDK and build tools
-        if: steps.cache.outputs.cache-hit != 'true'
+      - name: Install NDK
+        if: steps.cts.outputs.cache-hit != 'true' || steps.native.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ninja-build zip unzip file
@@ -50,14 +63,94 @@ jobs:
           echo "ANDROID_NDK_PATH=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
 
       - name: Build Vulkan CTS
-        if: steps.cache.outputs.cache-hit != 'true'
+        if: steps.cts.outputs.cache-hit != 'true'
         run: OUT="$PWD/cts-out" WORK="$RUNNER_TEMP/cts" bash cts/build-cts.sh
 
-      - name: Show bundle
-        run: ls -la cts-out && cat cts-out/cts-version.txt
+      - name: Build native libraries
+        if: steps.native.outputs.cache-hit != 'true'
+        run: OUT="$PWD/native-out" bash native/build-native.sh
+
+      # 3. Test catalog for the picker, cached by CTS tag + generator + presets.
+      - name: Restore test catalog
+        id: catalog
+        uses: actions/cache@v4
+        with:
+          path: catalog-out
+          key: catalog-${{ env.CTS_TAG }}-${{ hashFiles('tools/make_catalog.py', 'tools/presets.tsv') }}
+
+      - name: Build test catalog
+        if: steps.catalog.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p catalog-out
+          python3 tools/make_catalog.py cts-out/vk-default.txt.gz catalog-out "$CTS_TAG" tools/presets.tsv
+
+      - name: Stage CTS, native libraries and catalog into the app
+        run: |
+          set -e
+          J=app/src/main/jniLibs/arm64-v8a
+          A=app/src/main/assets/cts
+          mkdir -p "$J" "$A/catalog"
+          cp cts-out/deqp-vk "$J/libdeqp_vk.so"
+          cp native-out/libdlvkshim.so native-out/libdlrec.so "$J/"
+          cp cts-out/vulkan-data.zip cts-out/cts-version.txt "$A/"
+          cp catalog-out/* "$A/catalog/"
+          ls -la "$J" "$A"
+          cat "$A/cts-version.txt"
+
+      # 4. App. setup-gradle caches the wrapper, dependencies and the build cache
+      #    for every branch (not only the default branch).
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Build APK
+        run: ./gradlew :app:assembleRelease --build-cache --stacktrace
+
+      - name: Verify signature (v1 + v2 + v3, AOSP test key)
+        run: |
+          set -e
+          BT="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          APK=app/build/outputs/apk/release/app-release.apk
+          "$BT/apksigner" verify --verbose --print-certs --min-sdk-version 24 "$APK" | tee verify.txt
+          grep -q "Verified using v1 scheme (JAR signing): true" verify.txt
+          grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" verify.txt
+          grep -q "Verified using v3 scheme (APK Signature Scheme v3): true" verify.txt
+          grep -qi "SHA-256 digest: a40da80a59d170caa950cf15c18c454d47a39b26989d8b640ecd745ba71bf5dc" verify.txt
+          "$BT/aapt2" dump badging "$APK" | grep -E "^package:|^application-label:|native-code"
+
+      - name: Name APK
+        id: apk
+        run: |
+          set -e
+          VER=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+          SHA=${GITHUB_SHA::8}
+          NAME="DriverLab-v${VER}-${SHA}.apk"
+          mkdir -p dist
+          cp app/build/outputs/apk/release/app-release.apk "dist/$NAME"
+          (cd dist && sha256sum "$NAME" > "$NAME.sha256" && cat "$NAME.sha256")
+          ls -la dist
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: cts-bundle
-          path: cts-out
+          name: DriverLab-apk
+          path: dist/
           retention-days: 30
+
+      - name: Publish release
+        if: inputs.release && inputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          NOTES="release-notes/${{ inputs.tag }}.md"
+          test -f "$NOTES"
+          gh release create "${{ inputs.tag }}" dist/* \
+            --target "$GITHUB_SHA" \
+            --title "DriverLab ${{ inputs.tag }}" \
+            --notes-file "$NOTES"
