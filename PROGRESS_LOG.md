@@ -2,6 +2,19 @@
 
 Newest first.
 
+## 2026-11-01 — merged fix/blob-driver-zips, RELEASED v0.1.1 (main)
+
+User: "merge it and make it 0.1.1". Backup ref refs/backup/20261101/main-before-blob-driver-zips
+= 29c782031a10d40d74ce95fb703844da1c2842e4 pushed + verified first; main fast-forwarded
+29c7820 → 4533e5b2 (tree == device-checked bdaaf3ba + PROGRESS_LOG). Release cut 8405f0ce
+"Release 0.1.1 (versionCode 2)" (versionName 0.1.1, release-notes/v0.1.1.md).
+Release workflow 41337755265 (release=true, tag=v0.1.1, headSha 8405f0ce) success;
+https://github.com/The412Banner/DriverLab/releases/tag/v0.1.1 — Latest, tag →
+8405f0ceee479a7403094b4ea0502ab0732fce72, asset DriverLab-v0.1.1-8405f0ce.apk sha256
+527bd370e2b2e8ddd95014c79a07ec2276d839cbc664b457b77d9595d1a39cb2 (== .sha256 file),
+manifest versionName 0.1.1, notes == release-notes/v0.1.1.md. The release APK itself is
+not installed anywhere (same code as device-checked bdaaf3ba + version numbers).
+fix/blob-driver-zips kept (not deleted).
 ## 2026-11-01 — feat/test-tools: 5 features (written, NOT compiled yet)
 
 User: "do 1 and 2, and start the research for 4" + Hugo: remove the 500k list limit,
