@@ -97,6 +97,7 @@ fun rememberRunStarter(nav: NavHostController): RunStarter {
             captureCapBytes = settings.captureCapBytes,
             timeoutSec = settings.timeoutSec,
             batchSize = settings.batchSize,
+            jobs = settings.jobs,
             perTestLogLimit = settings.perTestLogLimit,
             export = settings.exportToDownloads,
             rawLog = settings.rawKgslLog,

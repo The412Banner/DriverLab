@@ -139,7 +139,7 @@ fun RunScreen(nav: NavHostController) {
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
                         Column(Modifier.fillMaxWidth().padding(16.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Now running", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.weight(1f))
+                                Text(if (l.running > 1) "Now running · ${l.running} at once" else "Now running", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.weight(1f))
                                 if (l.record) {
                                     Icon(Icons.Filled.FiberManualRecord, null, Modifier.size(12.dp), tint = MaterialTheme.colorScheme.error)
                                     Spacer(Modifier.width(4.dp))

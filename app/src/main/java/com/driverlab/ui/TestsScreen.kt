@@ -107,8 +107,8 @@ fun TestsScreen(nav: NavHostController) {
             busy = "Loading the test list…"
             try {
                 val cr = context.contentResolver
-                val (name, names) = withContext(Dispatchers.IO) { TestList.displayName(cr, uri) to TestList.read(cr, uri) }
-                loadedList = name to AppGraph.selection.loadList(names, name)
+                val name = withContext(Dispatchers.IO) { TestList.displayName(cr, uri) }
+                loadedList = name to AppGraph.selection.loadList(name, context.cacheDir) { sink -> TestList.readLines(cr, uri, sink) }
                 path = ""; query = ""
             } catch (e: Exception) {
                 Toast.makeText(context, "Could not read the list: ${e.message}", Toast.LENGTH_LONG).show()
@@ -223,19 +223,15 @@ fun TestsScreen(nav: NavHostController) {
             title = { Text(name) },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
-                    if (r.tooMany) {
-                        Text("The list has more than ${Fmt.count(TestList.MAX_NAMES.toLong())} names. Use whole groups (for example dEQP-VK.api.*) for big sets.")
-                    } else {
-                        Text("${Fmt.count(r.tests)} tests selected from ${Fmt.count(r.names.toLong())} names in the list.")
-                        if (r.missing.isNotEmpty()) {
-                            Spacer(Modifier.height(8.dp))
-                            val one = r.missing.size == 1
-                            Text("${Fmt.count(r.missing.size.toLong())} ${if (one) "name is" else "names are"} not in ${catalog.ctsTag} (renamed, removed, or a different suite):",
-                                style = MaterialTheme.typography.bodySmall)
-                            Spacer(Modifier.height(4.dp))
-                            Text(r.missing.take(50).joinToString("\n") + if (r.missing.size > 50) "\n…" else "", style = MonoSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
+                    Text("${Fmt.count(r.tests)} tests selected from ${Fmt.count(r.names)} names in the list.")
+                    if (r.missingCount > 0) {
+                        Spacer(Modifier.height(8.dp))
+                        val one = r.missingCount == 1L
+                        Text("${Fmt.count(r.missingCount)} ${if (one) "name is" else "names are"} not in ${catalog.ctsTag} (renamed, removed, or a different suite):",
+                            style = MaterialTheme.typography.bodySmall)
+                        Spacer(Modifier.height(4.dp))
+                        Text(r.missing.take(50).joinToString("\n") + if (r.missingCount > 50) "\n…" else "", style = MonoSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             },

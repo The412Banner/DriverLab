@@ -5,6 +5,8 @@ import android.content.Intent
 import android.os.Build
 import com.driverlab.service.RunService
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,7 +17,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.BufferedWriter
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 /** Starts, runs and stops one test session at a time. */
 class RunManager(
@@ -37,6 +43,8 @@ class RunManager(
         val perTestLogLimit: Int,
         val export: Boolean,
         val rawLog: Boolean = true,
+        /** Test programs running at the same time; recording always uses 1. */
+        val jobs: Int = 1,
     )
 
     enum class Phase { STARTING, RUNNING, FINISHING, DONE, STOPPED, FAILED }
@@ -56,6 +64,8 @@ class RunManager(
         val message: String?,
         val record: Boolean,
         val exported: List<String> = emptyList(),
+        /** Test programs running right now. */
+        val running: Int = 0,
     ) {
         val active: Boolean get() = phase == Phase.STARTING || phase == Phase.RUNNING || phase == Phase.FINISHING
         val fraction: Float get() = if (total <= 0) 0f else (done.toFloat() / total).coerceIn(0f, 1f)
@@ -66,7 +76,7 @@ class RunManager(
 
     @Volatile private var pending: Request? = null
     private val stopFlag = AtomicBoolean(false)
-    @Volatile private var process: Process? = null
+    private val processes: MutableSet<Process> = ConcurrentHashMap.newKeySet()
 
     val isActive: Boolean get() = _live.value?.active == true
 
@@ -83,7 +93,7 @@ class RunManager(
 
     fun stop() {
         stopFlag.set(true)
-        process?.destroyForcibly()
+        processes.forEach { it.destroyForcibly() }
     }
 
     fun dismiss() {
@@ -115,15 +125,19 @@ class RunManager(
         @Volatile var phase = Phase.STARTING
         @Volatile var message: String? = null
         val recent = ArrayDeque<TestResult>()
-        var batchNo = 0
-        var anyRan = false
+        val batchCounter = AtomicInteger(0)
+        val jobs = if (req.record) 1 else req.jobs.coerceIn(1, 16)
+        val running = AtomicInteger(0)
+        /** Result files and counters are shared by all workers. */
+        val lock = Any()
+        @Volatile var anyRan = false
         val perTestFiles = req.record || req.total <= req.perTestLogLimit
 
         fun publish(exported: List<String> = emptyList()) {
             val r = synchronized(recent) { recent.toList() }
             _live.value = Live(
                 if (::id.isInitialized) id else "", req.label, driver?.name ?: "", startedAt, req.total, done,
-                counts, current, currentSince, r, phase, message, req.record, exported,
+                counts, current, currentSince, r, phase, message, req.record, exported, running.get(),
             )
         }
 
@@ -153,33 +167,49 @@ class RunManager(
             val ticker = scope.launch {
                 while (isActive) { publish(); delay(120) }
             }
-            var failure: String? = null
+            val failureRef = AtomicReference<String?>(null)
             try {
-                val batch = ArrayList<String>()
-                val size = if (req.record) 1 else req.batchSize.coerceIn(1, 5000)
-                selection.expand(req.selection) { name ->
-                    if (stopFlag.get() || failure != null) return@expand
-                    if (isGles(name)) {
-                        // GLES programs run one per process; keep the catalog order.
-                        if (batch.isNotEmpty()) {
-                            failure = runBatch(batch.toList())
-                            batch.clear()
+                // One or more workers take items from a queue: a batch of CTS tests, or one GLES
+                // program (one per process). With one worker the order is the catalog order.
+                val size = when {
+                    req.record -> 1
+                    jobs > 1 -> minOf(req.batchSize, maxOf(8L, (req.total + jobs * 4 - 1) / (jobs * 4)).toInt()).coerceIn(1, 5000)
+                    else -> req.batchSize.coerceIn(1, 5000)
+                }
+                val queue = Channel<List<String>>(capacity = jobs * 2)
+                coroutineScope {
+                    repeat(jobs) {
+                        launch(Dispatchers.IO) {
+                            for (item in queue) {
+                                if (stopFlag.get() || failureRef.get() != null) continue
+                                val f = if (isGles(item[0])) { runGles(item[0]); null } else runBatch(item)
+                                if (f != null) failureRef.compareAndSet(null, f)
+                            }
                         }
-                        if (failure == null && !stopFlag.get()) runGles(name)
-                        return@expand
                     }
-                    batch += name
-                    if (batch.size >= size) {
-                        failure = runBatch(batch.toList())
-                        batch.clear()
+                    try {
+                        val batch = ArrayList<String>()
+                        selection.expand(req.selection) { name ->
+                            if (stopFlag.get() || failureRef.get() != null) return@expand
+                            if (isGles(name)) {
+                                if (batch.isNotEmpty()) { queue.send(batch.toList()); batch.clear() }
+                                queue.send(listOf(name))
+                                return@expand
+                            }
+                            batch += name
+                            if (batch.size >= size) { queue.send(batch.toList()); batch.clear() }
+                        }
+                        if (batch.isNotEmpty() && !stopFlag.get() && failureRef.get() == null) queue.send(batch.toList())
+                    } finally {
+                        queue.close()
                     }
                 }
-                if (batch.isNotEmpty() && !stopFlag.get() && failure == null) failure = runBatch(batch.toList())
             } catch (e: Exception) {
-                failure = "Run error: ${e.message}"
+                failureRef.compareAndSet(null, "Run error: ${e.message}")
             } finally {
                 ticker.cancel()
             }
+            val failure = failureRef.get()
             current = null
             phase = Phase.FINISHING
             message = "Saving results"
@@ -264,10 +294,10 @@ class RunManager(
 
         fun finish(
             name: String, status: TestStatus, msg: String, started: Long, stdout: CharSequence,
-            recLog: File?, capture: String?, rawOut: File? = null,
-        ) {
+            recLog: File?, capture: String?, rawOut: File? = null, batch: Int = 0,
+        ) = synchronized(lock) {
             val now = System.currentTimeMillis()
-            val r = TestResult(name, status, msg, if (started > 0) now - started else 0, now, batchNo, capture)
+            val r = TestResult(name, status, msg, if (started > 0) now - started else 0, now, batch, capture)
             tsv.write(SessionStore.resultLine(r)); tsv.write("\n")
             val tag = status.key.uppercase().padEnd(20)
             log.write("[${Fmt.stamp(now)}] $tag ${Fmt.duration(r.durationMs).padStart(9)}  $name${if (msg.isNotEmpty()) " — $msg" else ""}\n")
@@ -295,21 +325,21 @@ class RunManager(
 
         /** Runs one freedreno GLES test program (system driver only). */
         fun runGles(name: String) {
-            batchNo++
+            val bn = batchCounter.incrementAndGet()
             val test = name.removePrefix("$GLES_ROOT.")
             if (!driver!!.isSystem) {
-                finish(name, TestStatus.NOT_SUPPORTED, "OpenGL ES tests run on the system driver only", 0, "", null, null)
+                finish(name, TestStatus.NOT_SUPPORTED, "OpenGL ES tests run on the system driver only", 0, "", null, null, batch = bn)
                 return
             }
             val exe = File(Paths.nativeDir(context), "libtest_${test.removePrefix("test-")}.so")
             if (!exe.exists()) {
-                finish(name, TestStatus.INTERNAL_ERROR, "Test program ${exe.name} is missing from this build", 0, "", null, null)
+                finish(name, TestStatus.INTERNAL_ERROR, "Test program ${exe.name} is missing from this build", 0, "", null, null, batch = bn)
                 return
             }
-            val tag = "%05d".format(batchNo)
+            val tag = "%05d".format(bn)
             val out = File(dir, "output/batch-$tag.txt")
-            val captureTmp = File(work, "capture.rd.gz").apply { delete() }
-            val recLog = File(work, "kgsl.log").apply { delete() }
+            val captureTmp = File(work, "capture-$tag.rd.gz").apply { delete() }
+            val recLog = File(work, "kgsl-$tag.log").apply { delete() }
             val started = System.currentTimeMillis()
             current = name
             currentSince = started
@@ -324,10 +354,11 @@ class RunManager(
                 )
             } catch (e: Exception) {
                 current = null
-                finish(name, TestStatus.INTERNAL_ERROR, "Could not start ${exe.name}: ${e.message}", started, "", null, null)
+                finish(name, TestStatus.INTERNAL_ERROR, "Could not start ${exe.name}: ${e.message}", started, "", null, null, batch = bn)
                 return
             }
-            process = p
+            processes.add(p)
+            running.incrementAndGet()
             val timedOut = AtomicBoolean(false)
             val timeoutMs = req.timeoutSec * 1000L
             val watchdog = Thread {
@@ -357,8 +388,9 @@ class RunManager(
             }
             val exit = runCatching { p.waitFor() }.getOrDefault(-1)
             watchdog.interrupt()
-            process = null
-            current = null
+            processes.remove(p)
+            running.decrementAndGet()
+            if (current == name) current = null
             val status = when {
                 stopFlag.get() -> TestStatus.STOPPED
                 timedOut.get() -> TestStatus.TIMEOUT
@@ -380,7 +412,7 @@ class RunManager(
                 captureTmp.delete()
                 "captures/$base.rd.gz"
             } else null
-            finish(name, status, msg.take(300), started, "", if (req.rawLog) null else recLog, cap, rawOut = out)
+            finish(name, status, msg.take(300), started, "", if (req.rawLog) null else recLog, cap, rawOut = out, batch = bn)
         }
 
         /** Runs one batch, restarting after crashes. Returns a fatal problem, or null. */
@@ -388,15 +420,15 @@ class RunManager(
             val remaining = LinkedHashSet(tests)
             var fruitless = 0
             while (remaining.isNotEmpty() && !stopFlag.get()) {
-                batchNo++
-                val tag = "%05d".format(batchNo)
+                val bn = batchCounter.incrementAndGet()
+                val tag = "%05d".format(bn)
                 val caselist = File(work, "caselist-$tag.txt").apply { writeText(remaining.joinToString("\n", postfix = "\n")) }
                 val qpa = File(dir, "qpa/batch-$tag.qpa")
                 val out = File(dir, "output/batch-$tag.txt")
                 val single = if (req.record) remaining.first() else null
-                val captureTmp = File(work, "capture.rd.gz").apply { delete() }
-                val recLog = File(work, "kgsl.log").apply { delete() }
-                val dumpDir = File(work, "turnip-dump").apply { deleteRecursively() }
+                val captureTmp = File(work, "capture-$tag.rd.gz").apply { delete() }
+                val recLog = File(work, "kgsl-$tag.log").apply { delete() }
+                val dumpDir = File(work, "turnip-dump-$tag").apply { deleteRecursively() }
                 val p = try {
                     CtsRunner(context).start(
                         CtsRunner.Launch(
@@ -409,7 +441,11 @@ class RunManager(
                 } catch (e: Exception) {
                     return "Could not start the CTS: ${e.message}"
                 }
-                process = p
+                processes.add(p)
+                running.incrementAndGet()
+                // This batch's own test and start time, for its watchdog (several batches can run at once).
+                val runningTest = AtomicReference<String?>(null)
+                val runningSince = AtomicLong(0)
                 var cur: String? = null
                 var curStart = 0L
                 val slice = StringBuilder()
@@ -419,14 +455,14 @@ class RunManager(
                 val timedOut = AtomicBoolean(false)
                 val shim = ArrayList<String>()
                 val timeoutMs = req.timeoutSec * 1000L
-                val lastLine = java.util.concurrent.atomic.AtomicLong(System.currentTimeMillis())
+                val lastLine = AtomicLong(System.currentTimeMillis())
                 val watchdog = Thread {
                     try {
                         while (true) {
                             Thread.sleep(250)
                             val now = System.currentTimeMillis()
-                            val c = current
-                            if (c != null && timeoutMs > 0 && now - currentSince > timeoutMs) {
+                            val c = runningTest.get()
+                            if (c != null && timeoutMs > 0 && now - runningSince.get() > timeoutMs) {
                                 timedOut.set(true); p.destroyForcibly(); break
                             }
                             // Silent with no test running (stuck while starting up or between tests).
@@ -470,11 +506,12 @@ class RunManager(
                             when (val parsed = CtsRunner.parse(line)) {
                                 is CtsRunner.Line.Start -> {
                                     cur?.let { prev ->
-                                        finish(prev, TestStatus.INTERNAL_ERROR, "No result printed", curStart, slice, null, null)
+                                        finish(prev, TestStatus.INTERNAL_ERROR, "No result printed", curStart, slice, null, null, batch = bn)
                                         remaining.remove(prev)
                                     }
                                     cur = parsed.name; curStart = System.currentTimeMillis(); slice.setLength(0)
                                     slice.append(line).append('\n')
+                                    runningSince.set(curStart); runningTest.set(parsed.name)
                                     current = parsed.name; currentSince = curStart
                                 }
                                 is CtsRunner.Line.Result -> {
@@ -485,11 +522,12 @@ class RunManager(
                                             // Recording: the capture is complete only after the process exits.
                                             stash = Stash(name, parsed.status, parsed.message, curStart, slice.toString())
                                         } else {
-                                            finish(name, parsed.status, parsed.message, curStart, slice, null, null)
+                                            finish(name, parsed.status, parsed.message, curStart, slice, null, null, batch = bn)
                                         }
                                         remaining.remove(name)
                                         progressed = true
-                                        cur = null; current = null
+                                        cur = null; runningTest.set(null)
+                                        if (current == name) current = null
                                     }
                                 }
                                 is CtsRunner.Line.Shim -> {
@@ -503,9 +541,10 @@ class RunManager(
                 }
                 val exit = runCatching { p.waitFor() }.getOrDefault(-1)
                 watchdog.interrupt()
-                process = null
+                processes.remove(p)
+                running.decrementAndGet()
                 stash?.let { st ->
-                    finish(st.name, st.status, st.message, st.started, st.stdout, recLog, captureFor(st.name), rawOut = out)
+                    finish(st.name, st.status, st.message, st.started, st.stdout, recLog, captureFor(st.name), rawOut = out, batch = bn)
                 }
                 val name = cur
                 if (name != null) {
@@ -520,15 +559,15 @@ class RunManager(
                         else -> "Process ended without a result (exit ${exitText(exit)})"
                     }
                     val cap = if (single != null) captureFor(name) else null
-                    finish(name, status, msg, curStart, slice, if (single != null) recLog else null, cap, rawOut = if (single != null) out else null)
+                    finish(name, status, msg, curStart, slice, if (single != null) recLog else null, cap, rawOut = if (single != null) out else null, batch = bn)
                     remaining.remove(name)
                     progressed = true
-                    current = null
+                    if (current == name) current = null
                 }
                 if (stopFlag.get()) break
                 if (!progressed) {
                     if (exit == 0) {
-                        remaining.forEach { finish(it, TestStatus.NOT_RUN, "Not found in this CTS build", 0, "", null, null) }
+                        remaining.forEach { finish(it, TestStatus.NOT_RUN, "Not found in this CTS build", 0, "", null, null, batch = bn) }
                         remaining.clear()
                     } else {
                         fruitless++
@@ -536,14 +575,14 @@ class RunManager(
                             "CTS exited (${exitText(exit)}) before running a test: " + tail.takeLast(4).joinToString(" | ")
                         if (!anyRan && fruitless >= 2) return why
                         if (fruitless >= 2) {
-                            remaining.forEach { finish(it, TestStatus.INTERNAL_ERROR, why, 0, "", null, null) }
+                            remaining.forEach { finish(it, TestStatus.INTERNAL_ERROR, why, 0, "", null, null, batch = bn) }
                             remaining.clear()
                         }
                     }
                 } else {
                     fruitless = 0
                     if (exit == 0 && remaining.isNotEmpty()) {
-                        remaining.forEach { finish(it, TestStatus.NOT_RUN, "Not found in this CTS build", 0, "", null, null) }
+                        remaining.forEach { finish(it, TestStatus.NOT_RUN, "Not found in this CTS build", 0, "", null, null, batch = bn) }
                         remaining.clear()
                     }
                 }

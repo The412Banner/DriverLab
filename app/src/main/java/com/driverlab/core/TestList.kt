@@ -9,25 +9,25 @@ import java.io.Writer
  * Test lists ("caselist.txt"): one test name per line, the format the Vulkan CTS reads with
  * --deqp-caselist-file. Also accepted: whole groups as "group.*", blank lines, "#" comments,
  * and lines with a result after the name ("name,Fail" or "name Fail", as in Mesa CI lists).
+ * There is no size limit: lists are read as a stream (see [SelectionStore.loadList]).
  */
 object TestList {
-    /** Larger lists would need too much memory; whole groups ("group.*") cover big sets. */
-    const val MAX_NAMES = 500_000
-
-    fun parse(lines: Sequence<String>): List<String> {
-        val seen = LinkedHashSet<String>()
-        for (raw in lines) {
-            val l = raw.trim().removePrefix("﻿")
-            if (l.isEmpty() || l.startsWith("#")) continue
-            val name = l.split(',', ' ', '\t').first().trim()
-            if (name.isNotEmpty()) seen += name
-            if (seen.size > MAX_NAMES) break
+    /** The test name on one list line, or null for blank and comment lines. */
+    fun nameOf(raw: String): String? {
+        val l = raw.trim().removePrefix("﻿")
+        if (l.isEmpty() || l.startsWith("#")) return null
+        var end = l.length
+        for (i in l.indices) {
+            val c = l[i]
+            if (c == ',' || c == ' ' || c == '\t') { end = i; break }
         }
-        return seen.toList()
+        return l.substring(0, end).takeIf { it.isNotEmpty() }
     }
 
-    fun read(cr: ContentResolver, uri: Uri): List<String> =
-        cr.openInputStream(uri)!!.bufferedReader().useLines { parse(it) }
+    /** Feeds every line of a document to [sink]. */
+    suspend fun readLines(cr: ContentResolver, uri: Uri, sink: suspend (String) -> Unit) {
+        cr.openInputStream(uri)!!.bufferedReader().useLines { seq -> for (l in seq) sink(l) }
+    }
 
     fun displayName(cr: ContentResolver, uri: Uri): String =
         cr.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {

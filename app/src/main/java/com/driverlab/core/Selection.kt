@@ -1,6 +1,9 @@
 package com.driverlab.core
 
 import androidx.compose.ui.state.ToggleableState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -93,36 +96,106 @@ class SelectionStore(private val catalog: Catalog) {
         return c
     }
 
-    data class ListResult(val tests: Long, val names: Int, val missing: List<String>, val tooMany: Boolean = false)
+    data class ListResult(val tests: Long, val names: Long, val missing: List<String>, val missingCount: Long)
 
     /**
-     * Makes the selection exactly the tests in a test list (see [TestList.parse]): full test
-     * names, groups as "group.*", GLES programs with or without "fd-gles.". Names this CTS
-     * doesn't have are returned in [ListResult.missing].
+     * Makes the selection exactly the tests in a test list, fed line by line (see
+     * [TestList.nameOf]): full test names, groups as "group.*", GLES programs with or without
+     * "fd-gles.". No size limit: names are first sorted into one temporary file per top group
+     * under [work], then each group's tree is loaded once, its tests are marked, and fully
+     * selected groups are folded back into one entry. Names this CTS doesn't have are counted
+     * (the first [MISSING_SAMPLE] are returned).
      */
-    suspend fun loadList(names: List<String>, label: String): ListResult {
-        if (names.size > TestList.MAX_NAMES) return ListResult(0, names.size, emptyList(), tooMany = true)
-        val gles = catalog.glesTests.toHashSet()
-        val paths = names.map { n ->
-            when {
-                n == "*" || n == ROOT || n == "$ROOT.*" -> ROOT
-                n == "$GLES_ROOT.*" -> GLES_ROOT
-                n.endsWith(".*") -> n.dropLast(2)
-                !n.contains('.') && n in gles -> "$GLES_ROOT.$n"
-                else -> n
+    suspend fun loadList(label: String, work: File, feed: suspend (suspend (String) -> Unit) -> Unit): ListResult =
+        withContext(Dispatchers.IO) {
+            val dir = File(work, "listload").apply { deleteRecursively(); mkdirs() }
+            try {
+                val writers = HashMap<String, java.io.BufferedWriter>()
+                val missing = ArrayList<String>()
+                var missingCount = 0L
+                var names = 0L
+                var all = false
+                var allGles = false
+                val gles = catalog.glesTests.toHashSet()
+                val topNames = catalog.tops.map { it.name }.toHashSet()
+                fun miss(n: String) {
+                    missingCount++
+                    if (missing.size < MISSING_SAMPLE) missing += n
+                }
+                try {
+                    feed { raw ->
+                        val n = TestList.nameOf(raw) ?: return@feed
+                        names++
+                        when (n) {
+                            "*", ROOT, "$ROOT.*" -> all = true
+                            GLES_ROOT, "$GLES_ROOT.*" -> allGles = true
+                            else -> {
+                                val p = if (!n.contains('.') && n in gles) "$GLES_ROOT.$n" else n
+                                val top = catalog.topOf(p)
+                                val star = p.indexOf('*')
+                                val badStar = star >= 0 && (star != p.length - 1 || !p.endsWith(".*"))
+                                if (top == null || top !in topNames || badStar) miss(n)
+                                else writers.getOrPut(top) { File(dir, "$top.txt").bufferedWriter() }.apply { write(p); write("\n") }
+                            }
+                        }
+                        if (names % 65_536 == 0L) coroutineContext.ensureActive()
+                    }
+                } finally {
+                    writers.values.forEach { runCatching { it.close() } }
+                }
+                val m = LinkedHashMap<String, Entry>()
+                if (all) m[ROOT] = Entry(true, catalog.total.toInt())
+                if (allGles && catalog.glesTotal > 0) m[GLES_ROOT] = Entry(true, catalog.glesTotal.toInt())
+                for (top in catalog.tops) {
+                    val f = File(dir, "${top.name}.txt")
+                    if (!f.exists() || (top.isGles && allGles) || (!top.isGles && all)) continue
+                    coroutineContext.ensureActive()
+                    val t = catalog.tree(top.name)
+                    val look = t.Lookup()
+                    val full = BooleanArray(t.size)
+                    f.bufferedReader().useLines { seq ->
+                        for (p in seq) {
+                            val node = look.find(if (p.endsWith(".*")) p.dropLast(2) else p)
+                            if (node < 0) miss(p.removePrefix("$GLES_ROOT.")) else full[node] = true
+                        }
+                    }
+                    foldMarked(t, full, m)
+                }
+                val map = normalize(m)
+                replace(map, label)
+                ListResult(count(map), names, missing, missingCount)
+            } finally {
+                dir.deleteRecursively()
             }
         }
-        val m = LinkedHashMap<String, Entry>()
-        val missing = ArrayList<String>()
-        // Group by top so each catalog tree is loaded once.
-        for ((i, p) in paths.withIndex().sortedBy { catalog.topOf(it.value) ?: "" }) {
-            coroutineContext.ensureActive()
-            if (p in m) continue
-            val n = if (p.contains('*')) 0 else catalog.testsUnder(p)
-            if (n > 0) m[p] = Entry(true, n) else missing += names[i]
+
+    /** Adds one include entry per largest fully marked subtree of [t]. */
+    private fun foldMarked(t: GroupTree, full: BooleanArray, out: MutableMap<String, Entry>) {
+        val order = IntArray(t.size)
+        var n = 0
+        val stack = ArrayDeque<Int>()
+        stack.addLast(0)
+        while (stack.isNotEmpty()) {
+            val x = stack.removeLast()
+            order[n++] = x
+            for (c in t.children(x)) stack.addLast(c)
         }
-        replace(normalize(m), label)
-        return ListResult(count(), names.size, missing)
+        val inc = IntArray(t.size)
+        for (i in n - 1 downTo 0) {
+            val x = order[i]
+            inc[x] = if (full[x]) t.tests[x] else {
+                var s = 0
+                for (c in t.children(x)) s += inc[c]
+                s
+            }
+        }
+        stack.addLast(0)
+        while (stack.isNotEmpty()) {
+            val x = stack.removeLast()
+            if (inc[x] == 0) continue
+            if (inc[x] >= t.tests[x]) { out[t.path(x)] = Entry(true, t.tests[x]); continue }
+            for (c in t.children(x)) stack.addLast(c)
+        }
     }
 
     /** Streams every selected test name in catalog order. */
@@ -176,6 +249,8 @@ class SelectionStore(private val catalog: Catalog) {
     }
 
     companion object {
+        const val MISSING_SAMPLE = 200
+
         fun effectiveIn(m: Map<String, Entry>, path: String, self: Boolean): Boolean {
             var p = if (self) path else parentOf(path)
             while (p != null) {

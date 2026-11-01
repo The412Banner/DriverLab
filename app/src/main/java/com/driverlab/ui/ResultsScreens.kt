@@ -254,13 +254,13 @@ private fun TestListDialog(nav: NavHostController, meta: SessionMeta, onDismiss:
         scope.launch {
             busy = true
             try {
-                val names = AppGraph.sessions.namesWith(meta.id, picked)
-                withContext(Dispatchers.IO) {
+                val chosenNow = picked
+                val n = withContext(Dispatchers.IO) {
                     context.contentResolver.openOutputStream(uri, "wt")!!.bufferedWriter().use { w ->
-                        TestList.write(w) { sink -> names.forEach { sink(it) } }
+                        TestList.write(w) { sink -> AppGraph.sessions.forEachNameWith(meta.id, chosenNow, sink) }
                     }
                 }
-                Toast.makeText(context, "Saved ${Fmt.count(names.size.toLong())} test names.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Saved ${Fmt.count(n)} test names.", Toast.LENGTH_SHORT).show()
                 onDismiss()
             } catch (e: Exception) {
                 Toast.makeText(context, "Could not save the list: ${e.message}", Toast.LENGTH_LONG).show()
@@ -298,10 +298,12 @@ private fun TestListDialog(nav: NavHostController, meta: SessionMeta, onDismiss:
                 scope.launch {
                     busy = true
                     try {
-                        val names = AppGraph.sessions.namesWith(meta.id, picked)
-                        val label = order.filter { it in picked }.joinToString(" + ") { it.label.lowercase() } + " · " + meta.driverName
-                        val r = AppGraph.selection.loadList(names, label.replaceFirstChar { it.uppercase() })
-                        val note = if (r.missing.isEmpty()) "" else " (${r.missing.size} not in this CTS)"
+                        val chosenNow = picked
+                        val label = order.filter { it in chosenNow }.joinToString(" + ") { it.label.lowercase() } + " · " + meta.driverName
+                        val r = AppGraph.selection.loadList(label.replaceFirstChar { it.uppercase() }, context.cacheDir) { sink ->
+                            AppGraph.sessions.forEachNameWith(meta.id, chosenNow, sink)
+                        }
+                        val note = if (r.missingCount == 0L) "" else " (${Fmt.count(r.missingCount)} not in this CTS)"
                         Toast.makeText(context, "Selected ${Fmt.count(r.tests)} tests$note.", Toast.LENGTH_SHORT).show()
                         onDismiss()
                         nav.goTab("tests", fresh = true)

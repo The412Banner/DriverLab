@@ -95,6 +95,23 @@ fun SettingsScreen(nav: NavHostController) {
                 }
             }
             item {
+                val cores = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+                val jobs = s.jobs.coerceIn(1, cores)
+                SettingCard(
+                    "Test programs at once",
+                    (if (jobs == 1) "1 — one after another" else "$jobs — up to $jobs CPU cores at a time (this phone has $cores)") +
+                        ". More is faster on big runs; test times are less comparable and each program needs memory. " +
+                        "Recording always runs one at a time.",
+                ) {
+                    if (cores > 1) Slider(
+                        value = jobs.toFloat(),
+                        onValueChange = { v -> AppGraph.settings.update { it.copy(jobs = v.roundToInt().coerceIn(1, cores)) } },
+                        valueRange = 1f..cores.toFloat(),
+                        steps = (cores - 2).coerceAtLeast(0),
+                    )
+                }
+            }
+            item {
                 SwitchRow("Keep screen on", "While a run is shown on screen", s.keepScreenOn) { v -> AppGraph.settings.update { it.copy(keepScreenOn = v) } }
             }
             item { SectionTitle("Recording") }

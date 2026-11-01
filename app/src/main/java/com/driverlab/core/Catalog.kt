@@ -61,6 +61,39 @@ class GroupTree(
         return node
     }
 
+    /**
+     * Finds many paths in a row. Remembers the last matched child of every node, so names that
+     * come in catalog order (as test lists usually do) are found without scanning siblings.
+     */
+    inner class Lookup {
+        private val last = HashMap<Int, Int>()
+
+        fun find(path: String): Int {
+            if (path == rootPath) return 0
+            if (path.length <= rootPath.length + 1 || !path.startsWith(rootPath) || path[rootPath.length] != '.') return -1
+            var node = 0
+            var start = rootPath.length + 1
+            while (true) {
+                val dot = path.indexOf('.', start)
+                val seg = if (dot < 0) path.substring(start) else path.substring(start, dot)
+                val f = first[node]
+                val c = count[node]
+                if (c == 0) return -1
+                var k = last[node] ?: f
+                var found = -1
+                for (step in 0 until c) {
+                    if (strings[nameIdx[k]] == seg) { found = k; break }
+                    if (++k == f + c) k = f
+                }
+                if (found < 0) return -1
+                last[node] = found
+                node = found
+                if (dot < 0) return node
+                start = dot + 1
+            }
+        }
+    }
+
     internal fun stringIndicesMatching(q: String): BooleanArray {
         val hit = BooleanArray(strings.size)
         for (i in strings.indices) hit[i] = strings[i].contains(q, ignoreCase = true)

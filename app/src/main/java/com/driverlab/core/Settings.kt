@@ -11,6 +11,8 @@ data class AppSettings(
     val timeoutSec: Int = 120,
     val captureLevel: Int = 1, // 0 light 1 MB, 1 standard 4 MB, 2 full
     val batchSize: Int = 250,
+    /** Test programs running at the same time (1 = one after another). Recording always uses 1. */
+    val jobs: Int = 1,
     val keepScreenOn: Boolean = true,
     val record: Boolean = false,
     val exportToDownloads: Boolean = true,
@@ -46,6 +48,7 @@ class SettingsStore(context: Context) {
         timeoutSec = prefs.getInt("timeoutSec", 120),
         captureLevel = prefs.getInt("captureLevel", 1),
         batchSize = prefs.getInt("batchSize", 250),
+        jobs = prefs.getInt("jobs", 1),
         keepScreenOn = prefs.getBoolean("keepScreenOn", true),
         record = prefs.getBoolean("record", false),
         exportToDownloads = prefs.getBoolean("exportToDownloads", true),
@@ -62,6 +65,7 @@ class SettingsStore(context: Context) {
             .putInt("timeoutSec", s.timeoutSec)
             .putInt("captureLevel", s.captureLevel)
             .putInt("batchSize", s.batchSize)
+            .putInt("jobs", s.jobs)
             .putBoolean("keepScreenOn", s.keepScreenOn)
             .putBoolean("record", s.record)
             .putBoolean("exportToDownloads", s.exportToDownloads)

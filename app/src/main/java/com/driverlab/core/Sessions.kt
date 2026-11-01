@@ -76,17 +76,15 @@ class SessionStore(private val context: Context) {
         Loaded(out, lines, truncated)
     }
 
-    /** Names of every test in results.tsv whose result falls in [buckets], in run order. */
-    suspend fun namesWith(id: String, buckets: Set<Bucket>): List<String> = withContext(Dispatchers.IO) {
+    /** Feeds the name of every test in results.tsv whose result falls in [buckets], in run order. */
+    suspend fun forEachNameWith(id: String, buckets: Set<Bucket>, sink: suspend (String) -> Unit) = withContext(Dispatchers.IO) {
         val f = File(dir(id), "results.tsv")
-        val out = LinkedHashSet<String>()
         if (f.exists()) f.bufferedReader().useLines { seq ->
             for (l in seq) {
                 val r = parseResult(l) ?: continue
-                if (r.status.bucket in buckets) out += r.name
+                if (r.status.bucket in buckets) sink(r.name)
             }
         }
-        out.toList()
     }
 
     /** All captured tests of a session: test name -> capture file. */
