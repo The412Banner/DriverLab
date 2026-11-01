@@ -185,6 +185,23 @@ fun ResultsScreen(nav: NavHostController) {
     }
 }
 
+/** Shares the session's zip bundles (builds them if missing). */
+suspend fun shareSession(context: Context, m: SessionMeta) {
+    val exp = File(AppGraph.sessions.dir(m.id), "export")
+    val files = exp.listFiles()?.filter { it.name.endsWith(".zip") }?.takeIf { it.isNotEmpty() }
+        ?: AppGraph.sessions.buildBundles(m).filter { it.name.endsWith(".zip") }
+    context.startActivity(AppGraph.sessions.shareIntent(files))
+}
+
+suspend fun saveSessionToDownloads(context: Context, m: SessionMeta) {
+    val files = AppGraph.sessions.buildBundles(m)
+    val uris = AppGraph.sessions.exportToDownloads(files, Fmt.day(m.startedAt))
+    AppGraph.sessions.writeMeta(m.copy(exports = m.exports + uris))
+    withContext(Dispatchers.Main) {
+        Toast.makeText(context, "Saved ${uris.size} files to Download/DriverLab/${Fmt.day(m.startedAt)}", Toast.LENGTH_LONG).show()
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SessionScreen(nav: NavHostController, id: String) {
