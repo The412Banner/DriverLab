@@ -2,6 +2,25 @@
 
 Newest first.
 
+## 2026-11-01 — feat/test-tools: 5 features (written, NOT compiled yet)
+
+User: "do 1 and 2, and start the research for 4" + Hugo: remove the 500k list limit,
+add a multithread option; user: make results more fluid and organised.
+- 77cb5f6 test lists without limit (stream → per-top temp files → tree Lookup cursor
+  → bit marks → fold to group entries); Settings › Test programs at once (workers on a
+  queue, per-batch temp files + watchdog, results under a lock, Stop kills all;
+  recording = 1).
+- 82eb389 Find a setting that fixes it (Turnip): TU_DEBUG/IR3_SHADER_DEBUG list from
+  Mesa docs at main 01bab930; one tap adds a setting to the driver.
+- c09ab19 Game features: DXVK f8637768 + VKD3D-Proton 8293130e requirements (from
+  their code), one CTS run of info + 192 features tests per driver, compare two drivers,
+  focused test sets per profile (sizes checked in the catalog).
+- c2a2b13 Results: search, day headers, by-group view, sorting, off-main-thread
+  filtering, prev/next arrows on a test.
+Research for "record a game, replay per driver" (GFXReconstruct) running as a
+background agent → report in the session scratchpad.
+Release 0.1.1 (run 41337755265) still building at this point.
+
 ## 2026-11-01 — bdaaf3ba device-checked, v0.1.1-pre3 published (fix/blob-driver-zips)
 
 User: install + quick check; publish pre3 only after the check passes. Installed
