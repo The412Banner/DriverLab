@@ -58,10 +58,11 @@ private val tabs = listOf(
 /** Builds a route with URL-encoded arguments. */
 fun route(base: String, vararg args: String): String = base + args.joinToString("") { "/" + Uri.encode(it) }
 
-fun NavHostController.goTab(r: String) = navigate(r) {
-    popUpTo(graph.findStartDestination().id) { saveState = true }
+/** Switches tab, bringing back where that tab was left; [fresh] opens the tab's own screen instead. */
+fun NavHostController.goTab(r: String, fresh: Boolean = false) = navigate(r) {
+    popUpTo(graph.findStartDestination().id) { saveState = !fresh }
     launchSingleTop = true
-    restoreState = true
+    restoreState = !fresh
 }
 
 @OptIn(ExperimentalLayoutApi::class)

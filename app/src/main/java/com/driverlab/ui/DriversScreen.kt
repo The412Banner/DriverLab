@@ -97,8 +97,9 @@ fun DriversScreen(nav: NavHostController) {
             if (importing) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
             item {
                 Text(
-                    "Import a Turnip (or other Vulkan) driver as an AdrenoTools zip (meta.json + .so) or a bare .so. " +
-                        "DriverLab loads it only inside its own test program; nothing on the phone changes.",
+                    "Import a Vulkan driver as an AdrenoTools zip or a bare .so: Turnip, or a Qualcomm driver taken from " +
+                        "another phone together with its own libraries. DriverLab loads it only inside its own test program; " +
+                        "nothing on the phone changes.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }

@@ -304,7 +304,7 @@ private fun TestListDialog(nav: NavHostController, meta: SessionMeta, onDismiss:
                         val note = if (r.missing.isEmpty()) "" else " (${r.missing.size} not in this CTS)"
                         Toast.makeText(context, "Selected ${Fmt.count(r.tests)} tests$note.", Toast.LENGTH_SHORT).show()
                         onDismiss()
-                        nav.goTab("tests")
+                        nav.goTab("tests", fresh = true)
                     } finally {
                         busy = false
                     }

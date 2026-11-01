@@ -229,7 +229,8 @@ fun TestsScreen(nav: NavHostController) {
                         Text("${Fmt.count(r.tests)} tests selected from ${Fmt.count(r.names.toLong())} names in the list.")
                         if (r.missing.isNotEmpty()) {
                             Spacer(Modifier.height(8.dp))
-                            Text("${Fmt.count(r.missing.size.toLong())} names are not in ${catalog.ctsTag} (renamed, removed, or a different suite):",
+                            val one = r.missing.size == 1
+                            Text("${Fmt.count(r.missing.size.toLong())} ${if (one) "name is" else "names are"} not in ${catalog.ctsTag} (renamed, removed, or a different suite):",
                                 style = MaterialTheme.typography.bodySmall)
                             Spacer(Modifier.height(4.dp))
                             Text(r.missing.take(50).joinToString("\n") + if (r.missing.size > 50) "\n…" else "", style = MonoSmall,
