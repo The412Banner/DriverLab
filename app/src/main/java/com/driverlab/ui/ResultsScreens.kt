@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -27,6 +28,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
@@ -38,6 +45,9 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Surface
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -88,18 +98,26 @@ import com.driverlab.ui.theme.LocalStatusColors
 import com.driverlab.ui.theme.Mono
 import com.driverlab.ui.theme.MonoSmall
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ResultsScreen(nav: NavHostController) {
     val sessions by AppGraph.sessions.sessions.collectAsStateWithLifecycle()
     var driverFilter by rememberSaveable { mutableStateOf<String?>(null) }
+    var problemsOnly by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
     var comparing by rememberSaveable { mutableStateOf(false) }
     var picked by remember { mutableStateOf(listOf<String>()) }
     val drivers = sessions.map { it.driverName }.distinct()
-    val shown = sessions.filter { driverFilter == null || it.driverName == driverFilter }
+    val shown = sessions.filter {
+        (driverFilter == null || it.driverName == driverFilter) &&
+            (!problemsOnly || it.counts.failed + it.counts.crashed > 0) && matchesSession(it, query)
+    }
+    val byDay = shown.groupBy { dayLabel(it.startedAt) }
     Scaffold(
         topBar = {
             AppBar("Results", subtitle = "${sessions.size} sessions", actions = {
@@ -120,26 +138,46 @@ fun ResultsScreen(nav: NavHostController) {
             EmptyState(Icons.Filled.Assessment, "No results yet", "Run some tests and the results show up here.", Modifier.padding(pad))
             return@Scaffold
         }
-        LazyColumn(Modifier.fillMaxSize().padding(pad), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        LazyColumn(Modifier.fillMaxSize().padding(pad), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            item {
+                OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(top = 8.dp), placeholder = { Text("Search driver, GPU, tests, date") },
+                    leadingIcon = { Icon(Icons.Filled.Search, null) },
+                    trailingIcon = { if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Filled.Clear, "Clear") } },
+                    singleLine = true, shape = RoundedCornerShape(14.dp))
+            }
+            item {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(problemsOnly, { problemsOnly = !problemsOnly }, label = { Text("With problems") }, leadingIcon = { StatusDot(Bucket.FAILED) })
+                    if (drivers.size > 1) {
+                        FilterChip(driverFilter == null, { driverFilter = null }, label = { Text("All drivers") })
+                        for (d in drivers) FilterChip(driverFilter == d, { driverFilter = if (driverFilter == d) null else d }, label = { Text(d, maxLines = 1) })
+                    }
+                }
+            }
             if (comparing) item {
                 Text("Pick two sessions to compare (${picked.size}/2)", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
             }
-            if (drivers.size > 1) item {
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(driverFilter == null, { driverFilter = null }, label = { Text("All drivers") })
-                    for (d in drivers) FilterChip(driverFilter == d, { driverFilter = d }, label = { Text(d, maxLines = 1) })
-                }
+            if (shown.isEmpty()) item {
+                Text("No sessions match.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            items(shown, key = { it.id }) { s ->
-                Row(Modifier.animateItem(), verticalAlignment = Alignment.CenterVertically) {
-                    if (comparing) {
-                        Checkbox(checked = s.id in picked, onCheckedChange = { on ->
-                            picked = if (on) (picked + s.id).takeLast(2) else picked - s.id
-                        })
+            byDay.forEach { (day, list) ->
+                stickyHeader(key = "day-$day") {
+                    Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxWidth()) {
+                        Text("$day · ${list.size}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(vertical = 6.dp))
                     }
-                    SessionCard(s, Modifier.weight(1f)) {
-                        if (comparing) picked = if (s.id in picked) picked - s.id else (picked + s.id).takeLast(2)
-                        else nav.navigate(route("session", s.id))
+                }
+                items(list, key = { it.id }) { s ->
+                    Row(Modifier.animateItem(), verticalAlignment = Alignment.CenterVertically) {
+                        if (comparing) {
+                            Checkbox(checked = s.id in picked, onCheckedChange = { on ->
+                                picked = if (on) (picked + s.id).takeLast(2) else picked - s.id
+                            })
+                        }
+                        SessionCard(s, Modifier.weight(1f)) {
+                            if (comparing) picked = if (s.id in picked) picked - s.id else (picked + s.id).takeLast(2)
+                            else nav.navigate(route("session", s.id))
+                        }
                     }
                 }
             }
@@ -147,23 +185,7 @@ fun ResultsScreen(nav: NavHostController) {
     }
 }
 
-/** Shares the session's zip bundles (builds them if missing). */
-suspend fun shareSession(context: Context, m: SessionMeta) {
-    val exp = File(AppGraph.sessions.dir(m.id), "export")
-    val files = exp.listFiles()?.filter { it.name.endsWith(".zip") }?.takeIf { it.isNotEmpty() }
-        ?: AppGraph.sessions.buildBundles(m).filter { it.name.endsWith(".zip") }
-    context.startActivity(AppGraph.sessions.shareIntent(files))
-}
-
-suspend fun saveSessionToDownloads(context: Context, m: SessionMeta) {
-    val files = AppGraph.sessions.buildBundles(m)
-    val uris = AppGraph.sessions.exportToDownloads(files, Fmt.day(m.startedAt))
-    AppGraph.sessions.writeMeta(m.copy(exports = m.exports + uris))
-    withContext(Dispatchers.Main) {
-        Toast.makeText(context, "Saved ${uris.size} files to Download/DriverLab/${Fmt.day(m.startedAt)}", Toast.LENGTH_LONG).show()
-    }
-}
-
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SessionScreen(nav: NavHostController, id: String) {
     val sessions by AppGraph.sessions.sessions.collectAsStateWithLifecycle()
@@ -173,6 +195,10 @@ fun SessionScreen(nav: NavHostController, id: String) {
     val scope = rememberCoroutineScope()
     var filter by rememberSaveable { mutableStateOf<String?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
+    var sortName by rememberSaveable { mutableStateOf(ResultSort.PROBLEMS.name) }
+    var grouped by rememberSaveable { mutableStateOf(true) }
+    var collapsed by remember { mutableStateOf(setOf<String>()) }
+    var sortMenu by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var listDialog by remember { mutableStateOf(false) }
     val running = live?.sessionId == id && live?.active == true
@@ -197,10 +223,16 @@ fun SessionScreen(nav: NavHostController, id: String) {
         },
     ) { pad ->
         val results = loaded?.results.orEmpty()
-        val shown = remember(results, filter, query) {
-            results.filter { r ->
-                (filter == null || r.status.bucket.name == filter) && (query.isBlank() || r.name.contains(query.trim(), ignoreCase = true))
-            }
+        val sort = ResultSort.valueOf(sortName)
+        // Filtering and sorting run off the main thread; the short wait also smooths typing.
+        val organized by produceState<Organized?>(null, results, filter, query, sort, grouped) {
+            delay(120)
+            value = withContext(Dispatchers.Default) { organize(results, filter, query, sort, grouped) }
+        }
+        val org = organized
+        if (org != null) {
+            ResultsNav.sessionId = id
+            ResultsNav.names = org.flat.map { it.name }
         }
         LazyColumn(Modifier.fillMaxSize().padding(pad), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             item { SessionHeader(meta, running) }
@@ -215,16 +247,55 @@ fun SessionScreen(nav: NavHostController, id: String) {
                 }
             }
             item {
-                OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), placeholder = { Text("Filter by name") },
-                    leadingIcon = { Icon(Icons.Filled.Search, null) }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), placeholder = { Text("Search names and messages") },
+                    leadingIcon = { Icon(Icons.Filled.Search, null) },
+                    trailingIcon = { if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Filled.Clear, "Clear") } },
+                    singleLine = true, shape = RoundedCornerShape(14.dp))
             }
-            if (loaded == null) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(grouped, { grouped = true }, label = { Text("By group") })
+                    FilterChip(!grouped, { grouped = false }, label = { Text("List") })
+                    Spacer(Modifier.weight(1f))
+                    Box {
+                        TextButton(onClick = { sortMenu = true }) {
+                            Icon(Icons.AutoMirrored.Filled.Sort, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(sort.label)
+                        }
+                        DropdownMenu(sortMenu, { sortMenu = false }) {
+                            ResultSort.entries.forEach { o -> DropdownMenuItem(text = { Text(o.label) }, onClick = { sortName = o.name; sortMenu = false }) }
+                        }
+                    }
+                }
+            }
+            if (loaded == null || org == null) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
             if (loaded?.truncated == true) item {
                 Text("Large session: showing every problem and the first 50,000 passes. The full list is in results.tsv.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            items(shown.take(20_000), key = { it.name + it.finishedAt }) { r ->
-                ResultRow(r) { nav.navigate(route("test", id, r.name)) }
+            if (org != null && org.flat.isEmpty() && loaded != null) item {
+                Text("No tests match.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            val groups = org?.groups
+            if (org != null && groups == null) {
+                items(org.flat.take(20_000), key = { it.name + it.finishedAt }) { r ->
+                    ResultRow(r) { nav.navigate(route("test", id, r.name)) }
+                }
+            }
+            if (groups != null) {
+                var budget = 20_000
+                groups.forEach { g ->
+                    val open = g.key !in collapsed
+                    stickyHeader(key = "g-" + g.key) {
+                        GroupHeader(g, open) { collapsed = if (open) collapsed + g.key else collapsed - g.key }
+                    }
+                    if (open && budget > 0) {
+                        val part = g.items.take(budget)
+                        budget -= part.size
+                        items(part, key = { it.name + it.finishedAt }) { r ->
+                            ResultRow(r) { nav.navigate(route("test", id, r.name)) }
+                        }
+                    }
+                }
             }
         }
     }
@@ -353,6 +424,27 @@ fun SessionHeader(m: SessionMeta, running: Boolean) {
 }
 
 @Composable
+private fun GroupHeader(g: ResultGroup, open: Boolean, onToggle: () -> Unit) {
+    Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(onClick = onToggle).padding(horizontal = 6.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, if (open) "Collapse" else "Expand", Modifier.size(20.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(g.key, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            for (b in listOf(Bucket.FAILED, Bucket.CRASHED, Bucket.WARNING, Bucket.SKIPPED, Bucket.PASSED)) {
+                val n = g.counts[b]
+                if (n > 0) {
+                    Spacer(Modifier.width(8.dp)); StatusDot(b); Spacer(Modifier.width(3.dp))
+                    Text(Fmt.count(n.toLong()), style = MaterialTheme.typography.labelMedium)
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun ResultRow(r: TestResult, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick).padding(horizontal = 6.dp, vertical = 8.dp),
@@ -410,6 +502,12 @@ fun TestDetailScreen(nav: NavHostController, id: String, name: String) {
     val capture = r?.capture?.let { File(dir, it) }?.takeIf { it.exists() }
     Scaffold(topBar = {
         AppBar(name.substringAfterLast('.'), subtitle = name.removePrefix("dEQP-VK."), onBack = { nav.popBackStack() }, actions = {
+            val (prev, next) = remember(id, name) { ResultsNav.neighbours(id, name) }
+            fun go(other: String) = nav.navigate(route("test", id, other)) { popUpTo("test/{id}/{name}") { inclusive = true } }
+            if (prev != null || next != null) {
+                IconButton(onClick = { prev?.let(::go) }, enabled = prev != null) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Previous test") }
+                IconButton(onClick = { next?.let(::go) }, enabled = next != null) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Next test") }
+            }
             val files = listOfNotNull(testLog.takeIf { it.exists() }, capture)
             if (files.isNotEmpty()) IconButton(onClick = { context.startActivity(AppGraph.sessions.shareIntent(files)) }) { Icon(Icons.Filled.Share, "Share") }
         })
