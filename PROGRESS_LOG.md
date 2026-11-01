@@ -2,6 +2,25 @@
 
 Newest first.
 
+## 2026-11-01 — bdaaf3ba device-checked, v0.1.1-pre3 published (fix/blob-driver-zips)
+
+User: install + quick check; publish pre3 only after the check passes. Installed
+bdaaf3ba (base.apk sha256 d1dc7f1a… == staged). Checked: Drivers help text new;
+849 card "21 files · made for Android 8.1+"; load caselist-test.txt → "1 name is
+not in vulkan-cts-1.4.7.1"; run 27 (Finished) → Results → list button → Not
+supported → Select to run → lands on the Tests tab, 3 selected, label
+"Failed + crashed + not supported · System driver" (bug fixed). No crash/ANR.
+Termux back, peers got "done".
+
+**Pre-release:** https://github.com/The412Banner/DriverLab/releases/tag/v0.1.1-pre3 —
+tag → bdaaf3ba3e02bb8e3d9ccf06524e150e38b204ba, Pre-release (v0.1 stays Latest),
+APK DriverLab-v0.1-bdaaf3ba.apk + .sha256, downloaded back = same hash.
+
+**Next:** user's Fold 8 test (Android 17, Adreno 840) with shared Qualcomm drivers;
+merge fix/blob-driver-zips → main = user's go (backup ref first); stable 0.1.1 =
+user's word (versionCode bump in the release commit). Kimchi feature ideas await
+the user's pick.
+
 ## 2026-11-01 — DEVICE TEST of b33343b0 on the Pocket FIT (user OK to install; peers told + "done")
 
 Installed b33343b0 (base.apk sha256 b164a421… == staged), 13:04 EST.
