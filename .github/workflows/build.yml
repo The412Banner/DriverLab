@@ -18,7 +18,7 @@ permissions:
 env:
   CTS_TAG: vulkan-cts-1.4.7.1
   NDK_VERSION: 29.0.14206865
-  DE_ANDROID_API: "29"
+  DE_ANDROID_API: "30"
 
 jobs:
   cts:

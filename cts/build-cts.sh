@@ -10,7 +10,7 @@ set -euo pipefail
 
 CTS_TAG="${CTS_TAG:?}"
 NDK="${ANDROID_NDK_PATH:?}"
-API="${DE_ANDROID_API:-29}"
+API="${DE_ANDROID_API:-30}"
 OUT="${OUT:?}"
 JOBS="${JOBS:-$(nproc)}"
 WORK="${WORK:-$PWD/cts-work}"
@@ -36,7 +36,7 @@ cmake -S . -B ../build -G Ninja \
   -DDEQP_DISABLE_VK_VIDEO_TESTS=ON \
   -DSELECTED_BUILD_TARGETS=deqp-vk
 
-ninja -C ../build -j "$JOBS" deqp-vk
+ninja -C ../build -k 0 -j "$JOBS" deqp-vk
 
 BIN="$(find ../build -type f -name deqp-vk -perm -u+x | head -1)"
 DATA=external/vulkancts/data/vulkan   # what add_data_dir() copies
