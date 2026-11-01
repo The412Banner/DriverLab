@@ -1,0 +1,63 @@
+name: Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Publish a GitHub release with the APK"
+        type: boolean
+        default: false
+      tag:
+        description: "Release tag, e.g. v0.1 (only used when release is on)"
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+
+env:
+  CTS_TAG: vulkan-cts-1.4.7.1
+  NDK_VERSION: 29.0.14206865
+  DE_ANDROID_API: "29"
+
+jobs:
+  cts:
+    name: Vulkan CTS (deqp-vk, Android arm64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore CTS bundle
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: cts-out
+          key: cts-${{ env.CTS_TAG }}-ndk${{ env.NDK_VERSION }}-api${{ env.DE_ANDROID_API }}-${{ hashFiles('cts/build-cts.sh') }}
+
+      - name: Free disk space
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk/2* /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL || true
+          df -h /
+
+      - name: Install NDK and build tools
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ninja-build zip unzip file
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;${NDK_VERSION}" > /dev/null
+          echo "ANDROID_NDK_PATH=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Build Vulkan CTS
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: OUT="$PWD/cts-out" WORK="$RUNNER_TEMP/cts" bash cts/build-cts.sh
+
+      - name: Show bundle
+        run: ls -la cts-out && cat cts-out/cts-version.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cts-bundle
+          path: cts-out
+          retention-days: 30
