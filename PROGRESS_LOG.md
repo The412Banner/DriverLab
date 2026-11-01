@@ -2,6 +2,36 @@
 
 Newest first.
 
+## 2026-11-01 — DEVICE TEST 819d7867 on the Pocket FIT (v0.1.2-pre1 published first; user yes to both)
+
+Installed 819d7867 (base.apk sha256 a755c9fb… == staged), 14:23 local. Peer root-9c held; "done" sent.
+1. Game features: System driver check = 131 extensions / 213 feature values; verdicts match
+   the saved report checked independently (DXVK: VK_KHR_maintenance5/6 missing; SM 6.6:
+   no compute_shader_derivatives ext; maintenance5/6 features "not reported" because their
+   extension is absent). Compare with imported own driver: two rows per profile, detail table
+   ✓/✗/? per driver. "Select its tests" SM 6.6 → exactly 2,986 selected, lands on Tests. PASS
+2. Full 3,215,124-name caselist (430 MB) → "3,215,124 tests selected from 3,215,124 names",
+   ~11 s incl. polling, Java heap ~56 MB. One-line "dEQP-VK.glsl.atomic_operations.*" → 1,040. PASS
+3. Test programs at once: Quick check 8 vs 1 = identical (123/2/27, same 2 failures:
+   compute.pipeline.basic.undefined_values, vec2_nclamp_nan_component); atomics 1,040:
+   2.2 s (8) vs 4.0 s (1), identical; Rendering basics 16,300: 33.3 s (8) vs 2 m 33 s (1)
+   = ~4.6x, identical results 9,296/328/6,676 and IDENTICAL failure sets (328). PASS
+   BUG: one 1-at-a-time Rendering basics run stopped at 46% "Run error: read interrupted"
+   (batch 31 output ends mid-test; no crash/kill in logcat; the test passes elsewhere; a repeat
+   run finished). Cause not found; an output read error must not end the run → fix.
+   Not seen: the "N at once" label (runs finished between my polls).
+4. Results: search (atomics → 2, Pocket → 1), day header "Today · 13", With problems (6),
+   by-group view with group counts, collapse/expand, sort menu (Slowest first), List view,
+   test prev/next arrows step in the shown order, Back returns to the run. PASS
+5. Find a setting that fixes it: Turnip r4 imported ("Turnip Adreno (TM) 750"); Turnip Quick
+   check 140/3 fail (info extension tests) / 9 NS; Turnip Rendering basics 10,167 pass,
+   0 fail (Qualcomm 328 fail). Ran the finder on info.device_memory_budget_multi_instance:
+   18 runs, all Fail, "No single setting makes it pass." PASS (flow); "Use for this driver"
+   not exercised (no fixing setting).
+No crash-buffer entries, no FATAL/ANR, app pid unchanged all test. Restored: 1 at a time,
+recording ON, System driver in use; Termux back.
+Small fix: verdict shows only "N required missing" when items are also "not reported".
+
 ## 2026-11-01 — merged fix/blob-driver-zips, RELEASED v0.1.1 (main)
 
 User: "merge it and make it 0.1.1". Backup ref refs/backup/20261101/main-before-blob-driver-zips
