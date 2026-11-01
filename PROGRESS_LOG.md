@@ -29,7 +29,10 @@ the terminal — test setup only.)
 (27 → "8.1"); Drivers screen help text still says only "(meta.json + .so)".
 
 **Fixed (bdaaf3ba):** goTab(fresh = true) for Select to run; "1 name is"; androidName
-21–28; Drivers help text. CI 41335618122 (headSha bdaaf3ba) running. NOT device-tested.
+21–28; Drivers help text. CI 41335618122 (headSha bdaaf3ba) GREEN. APK sha256
+d1dc7f1a3c606de507d86fb91b32bfb1c97183624d7656929865c8c9f36b89ae STAGED
+/sdcard/Download/DriverLab-test-lists-fixes-bdaaf3ba.apk (host == device). NOT installed,
+NOT device-tested; pre3 / install need the user's yes.
 
 ## 2026-11-01 — test lists (caselist.txt) + "save failed tests" (fix/blob-driver-zips, CI running, NOT device-tested)
 
