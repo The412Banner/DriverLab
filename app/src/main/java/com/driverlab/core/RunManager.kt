@@ -200,6 +200,8 @@ class RunManager(
                     exported = sessions.exportToDownloads(bundles, Fmt.day(startedAt))
                     meta = meta.copy(exports = exported)
                     sessions.writeMeta(meta)
+                    // The zips now live in Download/DriverLab; don't keep a second copy in the app.
+                    if (exported.size == bundles.size) bundles.filter { it.name.endsWith(".zip") }.forEach { it.delete() }
                 }
             } catch (e: Exception) {
                 meta = meta.copy(message = (meta.message + " Export failed: ${e.message}").trim())
@@ -362,7 +364,7 @@ class RunManager(
                 timedOut.get() -> TestStatus.TIMEOUT
                 exit == 0 -> TestStatus.PASS
                 exit == 77 -> TestStatus.NOT_SUPPORTED
-                exit > 128 -> TestStatus.CRASH
+                isSignal(exit) -> TestStatus.CRASH
                 else -> TestStatus.FAIL
             }
             val msg = when (status) {
@@ -550,8 +552,12 @@ class RunManager(
             return null
         }
 
+        /** Java reports a process killed by signal N as 128 + N (N <= 64); exit(-1) is 255. */
+        fun isSignal(code: Int): Boolean = code in 129..192
+
         fun exitText(code: Int): String = when {
-            code > 128 -> "signal ${code - 128}${signalName(code - 128)}"
+            isSignal(code) -> "signal ${code - 128}${signalName(code - 128)}"
+            code == 255 -> "code 255 (exit -1)"
             else -> "code $code"
         }
 
