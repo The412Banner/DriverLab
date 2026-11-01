@@ -2,6 +2,30 @@
 
 Newest first.
 
+## 2026-11-01 — test lists (caselist.txt) + "save failed tests" (fix/blob-driver-zips, CI running, NOT device-tested)
+
+**Why:** Hugo (Discord 12:44 EST, after "Nice, it works" on v0.1.1-pre1 — his
+report, no logs seen): load a custom caselist.txt. Checked 4059568: no list
+import/export anywhere. User: "yes go ahead, include the save failed tests too".
+
+**Built (b33343b0):** core/TestList.kt (parse: one name per line, `group.*`,
+`#` comments, BOM, "name,Fail"/"name Fail" → name, dedup, cap 500,000 names;
+write), SelectionStore.loadList (GLES names with/without fd-gles., missing names
+returned, normalize), count() rewritten linear (each decision differing from its
+nearest decided ancestor adds/removes its tests; old nearestChildren was O(n²)),
+expand() uses a precomputed ancestor set instead of scanning all keys per node.
+Tests › ⋮ Load test list / Save test list (+ summary dialog with missing names).
+Session screen list button → dialog: pick result kinds (Failed + Crashed default),
+"Select to run" (loads selection, goes to Tests) or "Save file" (caselist.txt).
+SessionStore.namesWith reads results.tsv fully (not the 50,000-pass-capped list).
+README updated. No local compile possible (no Android SDK here) → CI is the first compile.
+
+**CI:** 41333545214 (headSha b33343b0) running.
+
+**Next / resume:** CI green → v0.1.1-pre2 pre-release (user already asked for
+pre-releases for the Fold) only after the user OKs → device test: load a list,
+save a list, save failed from a run, re-run on another driver.
+
 ## 2026-11-01 — Qualcomm drivers from other phones (fix/blob-driver-zips, CI running, NOT device-tested in the app)
 
 **Why:** Hugo (Discord, 06:38 EST) imported a Qualcomm driver shared as an
