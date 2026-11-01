@@ -2,6 +2,8 @@ package com.driverlab.ui
 
 import android.content.Context
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -24,6 +26,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
@@ -69,6 +72,7 @@ import com.driverlab.AppGraph
 import com.driverlab.core.Bucket
 import com.driverlab.core.Counts
 import com.driverlab.core.Fmt
+import com.driverlab.core.TestList
 import com.driverlab.core.Qpa
 import com.driverlab.core.RdCapture
 import com.driverlab.core.RegNames
@@ -167,6 +171,7 @@ fun SessionScreen(nav: NavHostController, id: String) {
     var filter by rememberSaveable { mutableStateOf<String?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
     var confirmDelete by remember { mutableStateOf(false) }
+    var listDialog by remember { mutableStateOf(false) }
     val running = live?.sessionId == id && live?.active == true
     val loaded by produceState<SessionStore.Loaded?>(null, id, meta?.counts, running) {
         value = AppGraph.sessions.loadResults(id)
@@ -180,6 +185,7 @@ fun SessionScreen(nav: NavHostController, id: String) {
     Scaffold(
         topBar = {
             AppBar(meta.driverName, subtitle = Fmt.dateTime(meta.startedAt), onBack = { nav.popBackStack() }, actions = {
+                IconButton(onClick = { listDialog = true }, enabled = !running) { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, "Make a test list") }
                 IconButton(onClick = { nav.navigate(route("folder", id, ".")) }) { Icon(Icons.Filled.Folder, "Files") }
                 IconButton(onClick = { scope.launch { shareSession(context, meta) } }) { Icon(Icons.Filled.Share, "Share") }
                 IconButton(onClick = { scope.launch { saveSessionToDownloads(context, meta) } }) { Icon(Icons.Filled.Download, "Save to Downloads") }
@@ -219,6 +225,7 @@ fun SessionScreen(nav: NavHostController, id: String) {
             }
         }
     }
+    if (listDialog) TestListDialog(nav, meta) { listDialog = false }
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
@@ -228,6 +235,89 @@ fun SessionScreen(nav: NavHostController, id: String) {
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
         )
     }
+}
+
+/**
+ * Turns a session's results into a test list: chosen outcomes (failed and crashed by default)
+ * become the selection for a new run, or a caselist.txt file.
+ */
+@Composable
+private fun TestListDialog(nav: NavHostController, meta: SessionMeta, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val order = listOf(Bucket.FAILED, Bucket.CRASHED, Bucket.WARNING, Bucket.SKIPPED, Bucket.PASSED)
+    var picked by remember { mutableStateOf(setOf(Bucket.FAILED, Bucket.CRASHED)) }
+    var busy by remember { mutableStateOf(false) }
+    val chosen = order.filter { it in picked }.sumOf { meta.counts[it] }
+    val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            busy = true
+            try {
+                val names = AppGraph.sessions.namesWith(meta.id, picked)
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openOutputStream(uri, "wt")!!.bufferedWriter().use { w ->
+                        TestList.write(w) { sink -> names.forEach { sink(it) } }
+                    }
+                }
+                Toast.makeText(context, "Saved ${Fmt.count(names.size.toLong())} test names.", Toast.LENGTH_SHORT).show()
+                onDismiss()
+            } catch (e: Exception) {
+                Toast.makeText(context, "Could not save the list: ${e.message}", Toast.LENGTH_LONG).show()
+            } finally {
+                busy = false
+            }
+        }
+    }
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        title = { Text("Make a test list") },
+        text = {
+            Column {
+                Text("Tests from this run with these results:", style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(6.dp))
+                for (b in order) {
+                    val n = meta.counts[b]
+                    Row(
+                        Modifier.fillMaxWidth().clickable(enabled = n > 0) { picked = if (b in picked) picked - b else picked + b },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(checked = b in picked && n > 0, onCheckedChange = null, enabled = n > 0)
+                        Spacer(Modifier.width(8.dp))
+                        Text("${b.label} (${Fmt.count(n.toLong())})")
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+                Text("Select them to run again (for example on another driver), or save them as caselist.txt.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = chosen > 0 && !busy, onClick = {
+                scope.launch {
+                    busy = true
+                    try {
+                        val names = AppGraph.sessions.namesWith(meta.id, picked)
+                        val label = order.filter { it in picked }.joinToString(" + ") { it.label.lowercase() } + " · " + meta.driverName
+                        val r = AppGraph.selection.loadList(names, label.replaceFirstChar { it.uppercase() })
+                        val note = if (r.missing.isEmpty()) "" else " (${r.missing.size} not in this CTS)"
+                        Toast.makeText(context, "Selected ${Fmt.count(r.tests)} tests$note.", Toast.LENGTH_SHORT).show()
+                        onDismiss()
+                        nav.goTab("tests")
+                    } finally {
+                        busy = false
+                    }
+                }
+            }) { Text("Select to run") }
+        },
+        dismissButton = {
+            Row {
+                TextButton(enabled = chosen > 0 && !busy, onClick = { save.launch("caselist.txt") }) { Text("Save file") }
+                TextButton(enabled = !busy, onClick = onDismiss) { Text("Cancel") }
+            }
+        },
+    )
 }
 
 @Composable

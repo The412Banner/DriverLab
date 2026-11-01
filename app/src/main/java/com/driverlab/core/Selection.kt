@@ -73,34 +73,72 @@ class SelectionStore(private val catalog: Catalog) {
         }
     }
 
+    /**
+     * Each decision that differs from its nearest decided ancestor adds (include) or removes
+     * (exclude) its tests; decisions equal to their ancestor change nothing. Linear in the map
+     * size, so lists with many single tests stay fast.
+     */
     fun count(map: Map<String, Entry> = _state.value): Long {
         if (map.isEmpty()) return 0
-        val keys = map.keys.sortedBy { it.length }
-        fun nearestChildren(parent: String): List<String> {
-            val prefix = "$parent."
-            val under = keys.filter { it.startsWith(prefix) }
-            return under.filter { k -> under.none { o -> o != k && k.startsWith("$o.") } }
-        }
-        fun countUnder(key: String, eff: Boolean, tests: Long): Long {
-            var c = if (eff) tests else 0L
-            for (ch in nearestChildren(key)) {
-                val e = map.getValue(ch)
-                c += countUnder(ch, e.include, e.tests.toLong()) - (if (eff) e.tests.toLong() else 0L)
+        var c = 0L
+        for ((k, e) in map) {
+            val tests = when (k) {
+                ROOT -> catalog.total
+                GLES_ROOT -> catalog.glesTotal
+                else -> e.tests.toLong()
             }
-            return c
+            val parent = effectiveIn(map, k, self = false)
+            if (e.include != parent) c += if (e.include) tests else -tests
         }
-        return countUnder(ROOT, map[ROOT]?.include ?: false, catalog.total) +
-            countUnder(GLES_ROOT, map[GLES_ROOT]?.include ?: false, catalog.glesTotal)
+        return c
+    }
+
+    data class ListResult(val tests: Long, val names: Int, val missing: List<String>, val tooMany: Boolean = false)
+
+    /**
+     * Makes the selection exactly the tests in a test list (see [TestList.parse]): full test
+     * names, groups as "group.*", GLES programs with or without "fd-gles.". Names this CTS
+     * doesn't have are returned in [ListResult.missing].
+     */
+    suspend fun loadList(names: List<String>, label: String): ListResult {
+        if (names.size > TestList.MAX_NAMES) return ListResult(0, names.size, emptyList(), tooMany = true)
+        val gles = catalog.glesTests.toHashSet()
+        val paths = names.map { n ->
+            when {
+                n == "*" || n == ROOT || n == "$ROOT.*" -> ROOT
+                n == "$GLES_ROOT.*" -> GLES_ROOT
+                n.endsWith(".*") -> n.dropLast(2)
+                !n.contains('.') && n in gles -> "$GLES_ROOT.$n"
+                else -> n
+            }
+        }
+        val m = LinkedHashMap<String, Entry>()
+        val missing = ArrayList<String>()
+        // Group by top so each catalog tree is loaded once.
+        for ((i, p) in paths.withIndex().sortedBy { catalog.topOf(it.value) ?: "" }) {
+            coroutineContext.ensureActive()
+            if (p in m) continue
+            val n = if (p.contains('*')) 0 else catalog.testsUnder(p)
+            if (n > 0) m[p] = Entry(true, n) else missing += names[i]
+        }
+        replace(normalize(m), label)
+        return ListResult(count(), names.size, missing)
     }
 
     /** Streams every selected test name in catalog order. */
     suspend fun expand(map: Map<String, Entry>, sink: suspend (String) -> Unit) {
         if (map.isEmpty()) return
+        // Every proper ancestor of a decided path: "has decisions below" in O(1).
+        val above = HashSet<String>()
+        for (k in map.keys) {
+            var p = parentOf(k)
+            while (p != null && above.add(p)) p = parentOf(p)
+        }
         for (top in catalog.tops) {
             coroutineContext.ensureActive()
             val topPath = top.path
             val topEff = effectiveIn(map, topPath, self = true)
-            val anyUnder = map.keys.any { it.startsWith("$topPath.") }
+            val anyUnder = topPath in above
             if (!topEff && !anyUnder) continue
             val tree = catalog.tree(top.name)
             // Iterative DFS keeping the inherited include flag and the path.
@@ -117,7 +155,7 @@ class SelectionStore(private val catalog: Catalog) {
                 if (tree.isLeaf(n)) {
                     if (eff) sink(p)
                 } else {
-                    val hasKeys = map.keys.any { it.startsWith("$p.") }
+                    val hasKeys = p in above
                     if (!eff && !hasKeys) continue
                     val kids = tree.children(n)
                     for (c in kids.reversed()) {

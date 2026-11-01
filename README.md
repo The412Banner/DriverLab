@@ -29,6 +29,12 @@ is loaded only inside DriverLab's own test program. No root needed.
   - Capture set: the adreno-cmdstream-gather test set.
 
   Every preset, group and test has an ⓘ button that explains what it checks.
+- **Test lists:** load a `caselist.txt` (one test name per line, the format
+  the Vulkan CTS uses; `group.*` for whole groups, `#` comments, and
+  `name,Fail` lines from Mesa CI lists work too) or save the current
+  selection as one (Tests › ⋮). From a finished run, the list button makes
+  a list of its failed and crashed tests (or any other results) to run
+  again, for example on another driver, or to save as a file.
 - **Drivers:** import a zip or `.so`. DriverLab checks it right away
   (GPU name, Vulkan version, driver version). Each driver can have its own
   settings, such as `TU_DEBUG=sysmem`.
