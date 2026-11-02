@@ -45,7 +45,29 @@ terminal; app UI NOT device-tested.
 **User 2026-11-02: "yes install it and test, you tap grant"** (Magisk root prompt for com.driverlab: I tap Grant).
 Settings before the test (to restore, check shared_prefs): driverId=system, record=true, jobs=1.
 
-**Resume point:** installing d62271ce on the Pocket FIT + device test; plan: speed test system vs
+**DEVICE TEST d62271ce on the Pocket FIT (2026-11-02 05:00–05:16 local; installed base.apk sha256 15438edb… == staged,
+versionCode 3; peer root-e6 told + "done"; settings.xml backed up and restored byte-identical; Termux back):**
+- Speed test System vs Turnip r4, 9 scenes, 3 rounds, 3 s, no pause: finished, alternating order, live picture window
+  showed the scenes, verdicts e.g. cube Turnip +10 %, draws System +118 %, triangles/passes "no clear difference";
+  report saved Download/DriverLab/2026-11-02/05-01-18_speed-test.txt. Cosmetic: result cards not full width,
+  report "Android 14, unknown" (SOC_MODEL) → fixed in 1a9abc0.
+- Driver copy "Mesa Turnip … r4 (copy)" TU_DEBUG=gmem: files hard-linked (inode 2093857, 2 links).
+- Quick check ×3 on Turnip r4 + then also on the copy: 456/456 runs each, "Each test ran 3 times · same result
+  every time", "Fail in all 3 runs — …", Compare button → 152 in both, 152 same.
+- GPU error check: first try Magisk 31.1 rejected uid 10210 silently ("su: request rejected (10210)", no prompt;
+  Magisk app never opened, no shared_prefs) → app said "Could not read the kernel log: Permission denied" (message
+  improved in 1a9abc0). With the user's "you tap grant": added Magisk policy uid 10210 allow (same as the Termux uids'
+  rows). Then "No GPU errors" on both drivers; fake labelled line written to /dev/kmsg mid-run ("kgsl kgsl-3d0:
+  DRIVERLAB SELF-TEST fake GPU page fault line (not a real fault)") → GPU errors: 1, tied to the 6 tests running
+  then (jobs=6), filter chip "GPU errors 6", test detail shows the line, results.log GPU ERROR line.
+- Mesa labels: pipeline.monolithic.timestamp.calibrated (3 tests) ×3 on Turnip: calibration_test + dev_domain_test
+  Fail → "Known to Mesa 2", "Mesa's testing on the Adreno 750 gets the same: Fail".
+- NOT exercised: "sometimes fails" (no test changed result between runs), real GPU faults, A722/Duo.
+- No DriverLab lines in the crash buffer, no FATAL/ANR.
+Left on the device: the copy driver, 8 test sessions from today, Magisk allow rule for DriverLab (uid 10210).
+
+**Resume point:** 1a9abc0 (3 small fixes) CI 41427537161 running; merge = user's go (backup ref first, PR not
+needed for this repo); plan was: speed test system vs
 Turnip r4 (preview, verdicts, report), Quick check ×3 on Turnip (sometimes-fails + Mesa a750 labels),
 GPU error check (Magisk root prompt for com.driverlab — user's call), driver copy TU_DEBUG=gmem +
 "then also run on" + Compare. Announce takeover to peers, check topResumedActivity, Termux back.
