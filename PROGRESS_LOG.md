@@ -28,7 +28,21 @@ Proof level: CI-green; dashboard UI NOT device-tested.
 
 **User 2026-11-02: "install it"** → installing 957643f0 on the Pocket FIT + quick test. Settings backup
 /data/local/tmp/driverlab-settings.xml.bak-dash; screen rotation settings noted before forcing sideways (restore after).
-**Resume point:** device test: dashboard upright + sideways
+**DEVICE TEST 957643f0 on the Pocket FIT 07:37–07:49 local (installed hash f2cfaa53… == staged; peer told + done):**
+- Dashboard upright: new look OK (blue, outlines, JetBrains Mono, header icons). Conformance Quick check ×3: Stop button,
+  live progress 173/456, pass ring + tests/s line (141/s) live, "Run 2 of 3", finished + saved, "no test changed result".
+- Speed test A System / B Turnip r4 (6 scenes, 1 round, 3 s): live test card picture, fps label, frame-time line, score;
+  ROTATED sideways mid-run (user_rotation 1, auto-rotate off): wide layout (setup left, picture/frame/score right), run
+  kept going; done: "A faster 1, B faster 5", last test card, "Speed results and pictures" button.
+- Tests/Results/Drivers/Settings: new look + back arrows OK.
+- Problems found → fixed in 3e5a1b0 (CI 41447833663 3e5a1b043dc1800fd1f53f071528a23e3ae49cf3): teal secondaryContainer (chips, tonal buttons, sliders) → blue;
+  progress track teal; Tests run bar under the system buttons (no navigationBarsPadding after the tabs went);
+  "pictures match" tag missing right after a run; "1 rounds"; label spacing in the wide picture tile.
+- The user used the phone during the test (Discord, preset chips) — paused and asked; user: "yes that was me, go ahead".
+- Cleanup: settings.xml restored (cmp), rotation restored 1/1, screenshots removed, crash buffer 0, FATAL/ANR 0, Termux back.
+Proof: dashboard device-tested on the Pocket FIT (957643f0); 3e5a1b0 fixes NOT device-tested yet.
+
+**Resume point:** CI for 3e5a1b0 → stage → ask the user to install/check; merge = user's go. Device test was: dashboard upright + sideways
 (rotate), conformance Start/Stop + live tiles, speed test live picture/frame time/score, header icons, back arrows.
 
 ## 2026-11-02 — MERGED feat/speed-and-repeat into main (user: "merge it")
