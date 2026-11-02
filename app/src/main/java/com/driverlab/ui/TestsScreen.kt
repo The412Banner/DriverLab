@@ -179,7 +179,7 @@ fun TestsScreen(nav: NavHostController) {
                             Text("${Fmt.count(count)} tests", style = MaterialTheme.typography.titleMedium)
                             Text(label ?: "Custom selection", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Button(shape = BtnShape, onClick = starter.start, enabled = live?.active != true, shape = RoundedCornerShape(6.dp)) {
+                        Button(shape = BtnShape, onClick = starter.start, enabled = live?.active != true) {
                             Icon(Icons.Filled.PlayArrow, null)
                             Spacer(Modifier.width(6.dp))
                             Text("Run")

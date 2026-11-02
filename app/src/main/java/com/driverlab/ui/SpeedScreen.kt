@@ -294,15 +294,15 @@ private fun SpeedLiveCard(l: SpeedManager.Live, nav: NavHostController) {
             }
             Spacer(Modifier.height(10.dp))
             if (l.active) {
-                OutlinedButton(shape = BtnShape, onClick = { AppGraph.speed.stop() }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(6.dp)) {
+                OutlinedButton(shape = BtnShape, onClick = { AppGraph.speed.stop() }, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Filled.Stop, null); Spacer(Modifier.width(6.dp)); Text("Stop")
                 }
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (l.id.isNotEmpty() && AppGraph.speed.load(l.id) != null) {
-                        Button(shape = BtnShape, onClick = { nav.navigate(route("speedresult", l.id)) }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(6.dp)) { Text("Results") }
+                        Button(shape = BtnShape, onClick = { nav.navigate(route("speedresult", l.id)) }, modifier = Modifier.weight(1f)) { Text("Results") }
                     }
-                    OutlinedButton(shape = BtnShape, onClick = { AppGraph.speed.dismiss() }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(6.dp)) { Text("New test") }
+                    OutlinedButton(shape = BtnShape, onClick = { AppGraph.speed.dismiss() }, modifier = Modifier.weight(1f)) { Text("New test") }
                 }
             }
         }

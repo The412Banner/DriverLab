@@ -181,22 +181,22 @@ fun RunScreen(nav: NavHostController) {
             item {
               Column {
                 AnimatedVisibility(!l.active && l.pairIds.size == 2, enter = fadeIn() + scaleIn(initialScale = 0.95f)) {
-                    Button(shape = BtnShape, onClick = { nav.navigate(route("compare", l.pairIds[0], l.pairIds[1])) }, modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp), shape = RoundedCornerShape(6.dp)) {
+                    Button(shape = BtnShape, onClick = { nav.navigate(route("compare", l.pairIds[0], l.pairIds[1])) }, modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
                         Icon(Icons.AutoMirrored.Filled.CompareArrows, null); Spacer(Modifier.width(6.dp)); Text("Compare the two drivers")
                     }
                 }
                 AnimatedVisibility(!l.active, enter = fadeIn() + scaleIn(initialScale = 0.95f)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Button(shape = BtnShape, onClick = { if (l.sessionId.isNotEmpty()) nav.navigate(route("session", l.sessionId)) }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(6.dp)) {
+                        Button(shape = BtnShape, onClick = { if (l.sessionId.isNotEmpty()) nav.navigate(route("session", l.sessionId)) }, modifier = Modifier.weight(1f)) {
                             Icon(Icons.Filled.Assessment, null); Spacer(Modifier.width(6.dp)); Text("Results")
                         }
-                        OutlinedButton(shape = BtnShape, onClick = { if (l.sessionId.isNotEmpty()) nav.navigate(route("folder", l.sessionId, ".")) }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(6.dp)) {
+                        OutlinedButton(shape = BtnShape, onClick = { if (l.sessionId.isNotEmpty()) nav.navigate(route("folder", l.sessionId, ".")) }, modifier = Modifier.weight(1f)) {
                             Icon(Icons.Filled.Folder, null); Spacer(Modifier.width(6.dp)); Text("Files")
                         }
                     }
                 }
                 AnimatedVisibility(l.active, enter = fadeIn(), exit = fadeOut()) {
-                    OutlinedButton(shape = BtnShape, onClick = { AppGraph.runs.stop() }, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(6.dp)) {
+                    OutlinedButton(shape = BtnShape, onClick = { AppGraph.runs.stop() }, modifier = Modifier.fillMaxWidth().height(52.dp)) {
                         Icon(Icons.Filled.Stop, null); Spacer(Modifier.width(6.dp)); Text("Stop run")
                     }
                 }
