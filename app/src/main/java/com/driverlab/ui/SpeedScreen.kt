@@ -1,6 +1,6 @@
 package com.driverlab.ui
 
-import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
@@ -66,6 +66,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import com.driverlab.AppGraph
@@ -73,6 +75,7 @@ import com.driverlab.core.DriverInfo
 import com.driverlab.core.Fmt
 import com.driverlab.core.SpeedManager
 import com.driverlab.core.SpeedMath
+import com.driverlab.core.SpeedPictures
 import com.driverlab.core.SpeedRequest
 import com.driverlab.core.SpeedResult
 import com.driverlab.core.SpeedScenes
@@ -81,8 +84,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 
 /** Speed test: pick drivers and scenes, run, watch the picture, read the verdicts. */
 @Composable
@@ -268,11 +269,17 @@ private fun SpeedLiveCard(l: SpeedManager.Live, nav: NavHostController) {
             if (detail.isNotEmpty()) Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
             Spacer(Modifier.height(10.dp))
             LinearProgressIndicator(progress = { l.fraction }, modifier = Modifier.fillMaxWidth().height(6.dp))
+            var big by remember { mutableStateOf(false) }
             AnimatedVisibility(l.active, enter = fadeIn(), exit = fadeOut()) {
                 Column {
                     Spacer(Modifier.height(12.dp))
-                    PreviewWindow(AppGraph.speed.previewFile)
+                    PreviewWindow(AppGraph.speed.previewFile, Modifier.clickable { big = true })
+                    Text("Tap the picture to see it full screen", style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer)
                 }
+            }
+            if (big && l.active) {
+                FullScreenPicture(onClose = { big = false }) { PreviewWindow(AppGraph.speed.previewFile, Modifier.fillMaxSize(), rounded = false) }
             }
             if (l.samples.isNotEmpty()) {
                 Spacer(Modifier.height(10.dp))
@@ -304,7 +311,7 @@ private fun SpeedLiveCard(l: SpeedManager.Live, nav: NavHostController) {
 
 /** The small live picture: the program writes a downscaled frame to a file a few times a second. */
 @Composable
-private fun PreviewWindow(file: File) {
+private fun PreviewWindow(file: File, modifier: Modifier = Modifier, rounded: Boolean = true) {
     val image by produceState<ImageBitmap?>(null, file) {
         var last = 0L
         while (true) {
@@ -317,7 +324,8 @@ private fun PreviewWindow(file: File) {
         }
     }
     Box(
-        Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(12.dp)).background(Color.Black),
+        (if (rounded) Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(12.dp)) else Modifier)
+            .background(Color.Black).then(modifier),
         contentAlignment = Alignment.Center,
     ) {
         val img = image
@@ -326,18 +334,70 @@ private fun PreviewWindow(file: File) {
     }
 }
 
-/** Header (uint32 LE width, height) + RGBA rows. */
-private fun readPreview(f: File): ImageBitmap? = runCatching {
-    val bytes = f.readBytes()
-    if (bytes.size < 8) return null
-    val bb = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
-    val w = bb.getInt(0)
-    val h = bb.getInt(4)
-    if (w !in 1..4096 || h !in 1..4096 || bytes.size < 8 + w * h * 4) return null
-    val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-    bmp.copyPixelsFromBuffer(ByteBuffer.wrap(bytes, 8, w * h * 4))
-    bmp.asImageBitmap()
-}.getOrNull()
+private fun readPreview(f: File): ImageBitmap? = SpeedPictures.readRaw(f)?.asImageBitmap()
+
+/** A picture over the whole screen; tap anywhere to close. */
+@Composable
+private fun FullScreenPicture(onClose: () -> Unit, content: @Composable () -> Unit) {
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(Modifier.fillMaxSize().background(Color.Black).clickable(onClick = onClose), contentAlignment = Alignment.Center) {
+            content()
+        }
+    }
+}
+
+/** The test card pictures of a finished speed test, with the comparison verdict. */
+@Composable
+private fun PictureCheckCard(r: SpeedResult) {
+    val dir = AppGraph.speed.dir(r.id)
+    var open by remember { mutableStateOf<String?>(null) }
+    val first = r.pictures.firstOrNull { it.share < 0 }
+    val other = r.pictures.firstOrNull { it.share >= 0 && (r.drivers.size < 2 || it.driverId != first?.driverId) }
+        ?: r.pictures.firstOrNull { it.share >= 0 }
+    val anyBad = r.pictures.any { it.share >= 0 && !it.matches }
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(
+        containerColor = if (anyBad) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+    )) {
+        Column(Modifier.padding(14.dp)) {
+            Text("Picture check", style = MaterialTheme.typography.titleSmall)
+            Text(
+                if (anyBad) "A picture is different from driver A's. Look at the red areas."
+                else "Every test card picture matches driver A's.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Spacer(Modifier.height(8.dp))
+            val shown = listOfNotNull(
+                first?.let { "A" to it.file },
+                other?.let { (if (r.drivers.size > 1 && it.driverId != first?.driverId) "B" else "A round ${it.round}") to it.file },
+                other?.diffFile?.takeIf { it.isNotEmpty() }?.let { "Differences" to it },
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                for ((label, name) in shown) {
+                    Column(Modifier.weight(1f)) {
+                        PictureFile(File(dir, name), Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(8.dp)).clickable { open = name })
+                        Text(label, style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            for (line in SpeedManager.pictureLines(r)) Text(line, style = MaterialTheme.typography.labelSmall)
+            Text("Tap a picture to see it full screen.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+    open?.let { name ->
+        FullScreenPicture(onClose = { open = null }) { PictureFile(File(dir, name), Modifier.fillMaxSize()) }
+    }
+}
+
+@Composable
+private fun PictureFile(f: File, modifier: Modifier) {
+    val img by produceState<ImageBitmap?>(null, f) {
+        value = withContext(Dispatchers.IO) { runCatching { BitmapFactory.decodeFile(f.absolutePath)?.asImageBitmap() }.getOrNull() }
+    }
+    Box(modifier.background(Color.Black), contentAlignment = Alignment.Center) {
+        img?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit) }
+    }
+}
 
 @Composable
 fun SpeedResultScreen(nav: NavHostController, id: String) {
@@ -375,6 +435,7 @@ fun SpeedResultScreen(nav: NavHostController, id: String) {
                     }
                 }
             }
+            if (r.pictures.isNotEmpty()) item { PictureCheckCard(r) }
             items(rows, key = { it.scene }) { row ->
                 val scene = SpeedScenes.byId(row.scene)
                 Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = if (row.clear) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh)) {

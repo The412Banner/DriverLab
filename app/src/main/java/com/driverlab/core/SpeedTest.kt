@@ -25,14 +25,15 @@ data class SpeedScene(val id: String, val title: String, val what: String)
 
 object SpeedScenes {
     val all = listOf(
+        SpeedScene("card", "Test card", "A solid test picture: colour bars, colour fades, a checkerboard, circles and spinning cubes. Easy to check by eye, and each driver's picture is compared pixel by pixel with driver A's."),
         SpeedScene("cube", "Spinning cube", "One textured cube per frame, like the AIO cube test. Very little work, so it mostly measures the driver's cost per frame."),
         SpeedScene("fill", "Filling the screen", "16 see-through layers over a 1080p picture: how fast the GPU paints pixels."),
-        SpeedScene("texture", "Textures", "8 layers that read a large image: how fast the GPU reads textures."),
+        SpeedScene("texture", "Textures", "8 layers that read a large picture of coloured blocks: how fast the GPU reads textures."),
         SpeedScene("geometry", "Many triangles", "About a million triangles per frame: how fast the GPU handles shapes."),
-        SpeedScene("draws", "Many draw calls", "20,000 small draws per frame, recorded again every frame: the driver's own CPU cost. This matters a lot for games through DXVK."),
+        SpeedScene("draws", "Many draw calls", "20,000 small tiles that fill the screen, one draw each, recorded again every frame: the driver's own CPU cost. This matters a lot for games through DXVK. A missing tile shows as a black hole."),
         SpeedScene("compute", "Compute maths", "Heavy maths in a compute shader: raw calculating speed."),
         SpeedScene("bandwidth", "Memory speed", "Copies 64 MB in a compute shader: how fast the GPU moves data."),
-        SpeedScene("passes", "Keep-the-picture passes", "8 drawing passes per frame that keep the previous picture: how the driver uses the GPU's tile memory (GMEM)."),
+        SpeedScene("passes", "Keep-the-picture passes", "8 drawing passes per frame that keep the previous picture and add to a grid of squares: how the driver uses the GPU's tile memory (GMEM)."),
         SpeedScene("pipelines", "Shader setup", "Builds 40 pipelines with nothing cached: how long the driver takes to prepare shaders, the cause of stutter in games. Lower is better."),
     )
 
@@ -68,6 +69,14 @@ data class SpeedSample(
 
 data class SpeedDriver(val id: String, val name: String, val version: String, val gpu: String, val env: String)
 
+/**
+ * One test card picture (scene "card", fixed frame). [share] = part of the pixels that differ from
+ * driver A's first picture; -1 for that reference picture itself.
+ */
+data class SpeedPicture(val driverId: String, val round: Int, val file: String, val diffFile: String, val share: Double) {
+    val matches: Boolean get() = share < SpeedPictures.MATCH_SHARE
+}
+
 data class SpeedResult(
     val id: String,
     val startedAt: Long,
@@ -79,6 +88,7 @@ data class SpeedResult(
     /** Battery temperature (°C) before each run and at the end. */
     val temps: List<Pair<Long, Float>>,
     val message: String,
+    val pictures: List<SpeedPicture> = emptyList(),
 )
 
 /** One driver's numbers for one scene across the rounds. */
@@ -237,6 +247,7 @@ class SpeedManager(private val context: Context, private val drivers: DriverRepo
         @Volatile var driverName = list.firstOrNull()?.name.orEmpty()
         @Volatile var scene: String? = null
         val total = req.rounds * list.size
+        var pictures: List<SpeedPicture> = emptyList()
 
         fun publish() {
             val s = synchronized(samples) { samples.toList() }
@@ -290,6 +301,11 @@ class SpeedManager(private val context: Context, private val drivers: DriverRepo
             }
             scene = null
             temps += System.currentTimeMillis() to batteryTemp()
+            if ("card" in req.scenes) {
+                message = "Comparing the pictures"
+                publish()
+                pictures = runCatching { checkPictures() }.getOrDefault(emptyList())
+            }
             val state = when {
                 failure != null -> "failed"
                 stopFlag.get() -> "stopped"
@@ -302,6 +318,9 @@ class SpeedManager(private val context: Context, private val drivers: DriverRepo
                 saved = runCatching {
                     sessions.copyToDownloads(report, Fmt.day(startedAt), "${Fmt.fileTime(startedAt)}_speed-test.txt")
                 }.isSuccess
+                File(dir, SHEET).takeIf { it.exists() }?.let { sheet ->
+                    runCatching { sessions.copyToDownloads(sheet, Fmt.day(startedAt), "${Fmt.fileTime(startedAt)}_speed-test-pictures.png") }
+                }
             }
             refresh()
             phase = when (state) {
@@ -321,6 +340,7 @@ class SpeedManager(private val context: Context, private val drivers: DriverRepo
             args += listOf("--scenes", req.scenes.joinToString(","))
             args += listOf("--seconds", req.seconds.toString(), "--warmup", "1")
             if (req.preview) args += listOf("--preview", previewFile.absolutePath)
+            if ("card" in req.scenes) args += listOf("--snapshot", File(dir, "card-${list.indexOf(d)}-r$r.raw").absolutePath)
             val p = try {
                 CtsRunner(context).startProgram(exe, args, d, drivers.libFile(d), work)
             } catch (e: Exception) {
@@ -393,13 +413,55 @@ class SpeedManager(private val context: Context, private val drivers: DriverRepo
             return null
         }
 
+        /**
+         * Turns the test card snapshots into PNGs and compares each with driver A's first one. Also
+         * writes a side-by-side sheet (A, B, differences) for Downloads.
+         */
+        fun checkPictures(): List<SpeedPicture> {
+            val out = ArrayList<SpeedPicture>()
+            val letters = listOf("A", "B")
+            var ref: android.graphics.Bitmap? = null
+            val sheetItems = ArrayList<Pair<String, android.graphics.Bitmap>>()
+            for ((i, d) in list.withIndex()) {
+                for (r in 1..req.rounds) {
+                    val raw = File(dir, "card-$i-r$r.raw")
+                    val bmp = SpeedPictures.readRaw(raw) ?: continue
+                    val png = "card-${letters[i]}-r$r.png"
+                    SpeedPictures.savePng(bmp, File(dir, png))
+                    raw.delete()
+                    val reference = ref
+                    if (reference == null) {
+                        ref = bmp
+                        out += SpeedPicture(d.id, r, png, "", -1.0)
+                        sheetItems += "A: ${d.name}" to bmp
+                        continue
+                    }
+                    val diff = SpeedPictures.compare(reference, bmp)
+                    if (diff == null) {
+                        out += SpeedPicture(d.id, r, png, "", 1.0)
+                        continue
+                    }
+                    val diffName = "card-${letters[i]}-r$r-diff.png"
+                    SpeedPictures.savePng(diff.image, File(dir, diffName))
+                    out += SpeedPicture(d.id, r, png, diffName, diff.share)
+                    // The sheet shows B's first picture, or a round of A that did not match its first.
+                    if (sheetItems.size == 1 && (i == 1 || diff.share >= SpeedPictures.MATCH_SHARE)) {
+                        sheetItems += "${letters[i]} round $r: ${d.name}" to bmp
+                        sheetItems += "Differences (red)" to diff.image
+                    }
+                }
+            }
+            SpeedPictures.sheet(sheetItems)?.let { SpeedPictures.savePng(it, File(dir, SHEET)) }
+            return out
+        }
+
         fun save(state: String, msg: String): SpeedResult {
             val ds = list.map { d ->
                 SpeedDriver(d.id, d.name, d.version.ifEmpty { d.probe?.driverVersion.orEmpty() },
                     info[d.id] ?: d.probe?.deviceName.orEmpty(), d.env)
             }
             val res = SpeedResult(id, startedAt, if (state == "running") 0 else System.currentTimeMillis(), state, req, ds,
-                synchronized(samples) { samples.toList() }, temps.toList(), msg)
+                synchronized(samples) { samples.toList() }, temps.toList(), msg, pictures)
             val tmp = File(dir, "speed.json.tmp")
             tmp.writeText(toJson(res).toString(2))
             tmp.renameTo(File(dir, "speed.json"))
@@ -414,6 +476,23 @@ class SpeedManager(private val context: Context, private val drivers: DriverRepo
     }
 
     companion object {
+        const val SHEET = "pictures.png"
+
+        /** Plain-language result of the picture check, one line per picture. */
+        fun pictureLines(r: SpeedResult): List<String> {
+            val names = r.drivers.mapIndexed { i, d -> d.id to (if (i == 0) "A" else "B") }.toMap()
+            return r.pictures.map { p ->
+                val who = "${names[p.driverId] ?: "?"} round ${p.round}"
+                when {
+                    p.share < 0 -> "$who: the reference picture"
+                    p.matches -> "$who: matches A (${pctPixels(p.share)} of pixels differ)"
+                    else -> "$who: DIFFERS from A (${pctPixels(p.share)} of pixels differ)"
+                }
+            }
+        }
+
+        fun pctPixels(share: Double): String = String.format(Locale.US, if (share < 0.01) "%.2f%%" else "%.1f%%", share * 100)
+
         /** "DLBENCH <kind> key=value ... msg=free text" -> kind and fields (values still percent-encoded, except msg). */
         fun parse(line: String): Pair<String, Map<String, String>>? {
             if (!line.startsWith("DLBENCH ")) return null
@@ -455,6 +534,10 @@ class SpeedManager(private val context: Context, private val drivers: DriverRepo
                 r.drivers.forEachIndexed { i, d -> sb.append("  ${names[i]}: ${SpeedMath.statText(row.stats[d.id])}\n") }
                 if (row.verdict.isNotEmpty()) sb.append("  → ${row.verdict}\n")
             }
+            if (r.pictures.isNotEmpty()) {
+                sb.append("\nPicture check (test card, same frame on every driver; a pixel differs when a colour is off by more than ${SpeedPictures.TOLERANCE}/255):\n")
+                for (l in pictureLines(r)) sb.append("  $l\n")
+            }
             sb.append("\nEach number is the middle value (median) of the rounds; ±% is how much the rounds varied.\n")
             sb.append("A gap smaller than that variation, or under 3%, is shown as \"no clear difference\".\n")
             sb.append("\nEvery run (frames, average, slowest 1% and GPU time per scene):\n")
@@ -486,6 +569,9 @@ class SpeedManager(private val context: Context, private val drivers: DriverRepo
                 }
             }))
             put("temps", JSONArray(r.temps.map { JSONArray(listOf(it.first, if (it.second.isNaN()) -1000.0 else it.second.toDouble())) }))
+            put("pictures", JSONArray(r.pictures.map { p ->
+                JSONObject().apply { put("driverId", p.driverId); put("round", p.round); put("file", p.file); put("diffFile", p.diffFile); put("share", p.share) }
+            }))
         }
 
         fun fromJson(o: JSONObject): SpeedResult {
@@ -521,6 +607,12 @@ class SpeedManager(private val context: Context, private val drivers: DriverRepo
                     a.getLong(0) to a.getDouble(1).let { if (it < -500) Float.NaN else it.toFloat() }
                 },
                 message = o.optString("message"),
+                pictures = (o.optJSONArray("pictures") ?: JSONArray()).let { ps ->
+                    (0 until ps.length()).map { i ->
+                        val p = ps.getJSONObject(i)
+                        SpeedPicture(p.optString("driverId"), p.optInt("round", 1), p.optString("file"), p.optString("diffFile"), p.optDouble("share", 1.0))
+                    }
+                },
             )
         }
     }
