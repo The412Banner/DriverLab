@@ -2,6 +2,27 @@
 
 Newest first.
 
+## 2026-11-02 — solid pictures + picture check for the speed test (feat/speed-and-repeat, IN PROGRESS)
+
+**Why:** user watched the speed test: scenes looked "garbled" (texture = noise, draws/passes = tiny dots by design;
+cube was fine on both drivers, checked: Download/DriverLab-speed-test-pictures.png). User: "I was hoping for something
+solid to see and check visually for errors" → plan approved ("yes go ahead"): (1) new "card" scene = TV-style test
+card (colour bars, ramps, checkerboard, circles, 5 spinning textured cubes, translucent panel); (2) picture check:
+every driver draws the same fixed frame (t = 1.0 s, --snapshot 960x540), compared pixel by pixel with driver A's
+(tolerance 24/255 per channel, "matches" below 0.2 % of pixels), red difference image, side-by-side sheet to
+Downloads; (3) texture = 256-texel coloured-block tile instead of noise, draws = 20,000 tiles edge to edge,
+passes = bigger squares; tap the live picture for full screen.
+
+**State:** app side committed as WIP (SpeedPictures.kt, SpeedTest.kt card scene + snapshot arg + checkPictures +
+report/JSON, SpeedScreen.kt PictureCheckCard + FullScreenPicture) — NOT compiled yet. Native side (dlbench "card"
+scene, --snapshot, texture/draws/passes changes) is being written by the helper session in the worktree,
+UNCOMMITTED (native/dlbench/**); its PNGs go to scratchpad dlb2/.
+
+**Resume point:** check `git status` in /root/src/DriverLab-wt/speed; when the native part is done and checked
+(snapshots of both drivers viewed + pixel-diff numbers to set SpeedPictures.TOLERANCE/MATCH_SHARE), commit native,
+CI (headSha check), test the CI binary in a terminal, stage APK, ASK before install. Installed on the Pocket FIT now:
+d62271ce test build (before these changes).
+
 ## 2026-11-02 — repeat runs, GPU error check, Mesa known failures, driver copies, speed test (feat/speed-and-repeat, IN PROGRESS)
 
 **Why:** user (2026-11-02): "do 1-4 and the speed test" from the offered list — (1) run tests
