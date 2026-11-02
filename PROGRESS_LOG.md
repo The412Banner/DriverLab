@@ -44,7 +44,9 @@ Proof: dashboard device-tested on the Pocket FIT (957643f0); 3e5a1b0 fixes NOT d
 
 CI 41447833663 (headSha 3e5a1b0) success; STAGED /sdcard/Download/DriverLab-dashboard-3e5a1b04.apk (sha256 583958d9…,
 CI == device); old 957643f0 staged APK removed (that build stays installed).
-**Resume point:** ask the user to install 3e5a1b04 for a quick look at the fixes; merge = user's go. Device test was: dashboard upright + sideways
+**User: "install it"** → installing 3e5a1b04 on the Pocket FIT for a quick look at the fixes (settings backup
+/data/local/tmp/driverlab-settings.xml.bak-dash2; restore after; Termux back; peer done).
+**Resume point:** after the check, merge = user's go. Device test was: dashboard upright + sideways
 (rotate), conformance Start/Stop + live tiles, speed test live picture/frame time/score, header icons, back arrows.
 
 ## 2026-11-02 — MERGED feat/speed-and-repeat into main (user: "merge it")
