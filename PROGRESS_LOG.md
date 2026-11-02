@@ -18,10 +18,20 @@ report/JSON, SpeedScreen.kt PictureCheckCard + FullScreenPicture) — NOT compil
 scene, --snapshot, texture/draws/passes changes) is being written by the helper session in the worktree,
 UNCOMMITTED (native/dlbench/**); its PNGs go to scratchpad dlb2/.
 
-**Resume point:** check `git status` in /root/src/DriverLab-wt/speed; when the native part is done and checked
-(snapshots of both drivers viewed + pixel-diff numbers to set SpeedPictures.TOLERANCE/MATCH_SHARE), commit native,
-CI (headSha check), test the CI binary in a terminal, stage APK, ASK before install. Installed on the Pocket FIT now:
-d62271ce test build (before these changes).
+**Native done (helper session) 73bc040:** card scene first in the list (bars/ramps/checker/rings/5 cubes/panel,
+exact-pixel check), --snapshot (t = 1 s frame, 960x540, "DLBENCH snapshot" line), texture = flat colour-block tile
+(check ±2), draws = 200x100 tiles edge to edge (static gradient), passes = 70 % squares, 24/255 per pass (check 192).
+Its terminal runs on the Pocket FIT (system + Turnip r4): all checks ok; card snapshots system vs Turnip: 0 pixels
+differ by > 8 (max 1 level) → kept TOLERANCE 24, MATCH_SHARE 0.2 %. I viewed both snapshots side by side + the
+preview grid: solid, identical.
+**CI 41431006975 (headSha 73bc040) success** (also compiles the WIP picture-check app code). CI libdlbench.so run
+alone (system driver): card/texture/draws/passes ok, snapshot 2,073,608 bytes, exit 0. Note: texture now ~1080 fps
+vs ~106 with noise (compressible, cache-friendly) — lighter test now, as warned.
+**Staged:** /sdcard/Download/DriverLab-test-card-73bc0409.apk sha256 1c124691…4b40 == CI == device. Old staged
+d62271ce APK removed from Download (that build is still installed). NOT installed — ask the user (away at work).
+
+**Resume point:** ask the user to install 73bc0409 on the Pocket FIT and run: speed test with card (A system, B Turnip
+r4) → picture check card matches, tap-to-full-screen, sheet PNG in Downloads; optional fake-difference check.
 
 ## 2026-11-02 — repeat runs, GPU error check, Mesa known failures, driver copies, speed test (feat/speed-and-repeat, IN PROGRESS)
 
