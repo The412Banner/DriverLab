@@ -30,8 +30,20 @@ vs ~106 with noise (compressible, cache-friendly) — lighter test now, as warne
 **Staged:** /sdcard/Download/DriverLab-test-card-73bc0409.apk sha256 1c124691…4b40 == CI == device. Old staged
 d62271ce APK removed from Download (that build is still installed). NOT installed — ask the user (away at work).
 
-**User 2026-11-02: "yes install it and test".** Settings backup → /data/local/tmp/driverlab-settings.xml.bak-20261102b.
-**Resume point:** installing 73bc0409 on the Pocket FIT and running: speed test with card (A system, B Turnip
+**User 2026-11-02: "yes install it and test".** DEVICE TEST 73bc0409 on the Pocket FIT 06:00–06:05 local:
+installed base.apk sha256 1c124691… == staged (versionCode 3); peer root-e6 told + "done".
+- Speed test A System vs B Turnip r4, 7 scenes (card, cube, fill, texture, geometry, draws, passes), 3 rounds, 3 s,
+  no pause: finished. Live window showed the solid test card; tap → full screen (textures' colour blocks live).
+- Picture check card: "Every test card picture matches driver A's", A / B / Differences thumbnails (no red),
+  6 lines (A r1 reference; A r2–r3, B r1–r3 0.00 % differ); tap → full screen OK. Downloads got
+  06-01-40_speed-test-pictures.png (A | B round 1 | differences) + 06-01-40_speed-test.txt with the picture section.
+- Numbers: card 3700 vs 3802 fps (no clear difference), cube Turnip +9 %, fill Turnip +10 %, textures 1148 fps (B).
+- Crash buffer: 0 DriverLab lines; FATAL/ANR: 0 (the 3 hits were the root tool echoing my own grep).
+- Settings unchanged (cmp with backup), backup removed, screenshots folder removed, Termux back.
+- NOT exercised: the "differs" path (red areas), because both drivers matched; Duo / A722.
+
+**Resume point:** branch feat/speed-and-repeat (head = this log commit after 73bc040), device-tested on the Pocket FIT;
+merge = user's go (backup ref first); Duo test optional. Plan was: speed test with card (A system, B Turnip
 r4) → picture check card matches, tap-to-full-screen, sheet PNG in Downloads; optional fake-difference check.
 
 ## 2026-11-02 — repeat runs, GPU error check, Mesa known failures, driver copies, speed test (feat/speed-and-repeat, IN PROGRESS)
