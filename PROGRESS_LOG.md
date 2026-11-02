@@ -2,6 +2,19 @@
 
 Newest first.
 
+## 2026-11-02 — MERGED feat/dashboard-ui, RELEASED v0.2.0 (main)
+
+User: "after you fix it and verify its built green and fixed merge it to the main branch and release a new stable".
+Wording fix 476db3f device-checked (Recent list "1 round"). Backup ref refs/backup/20261102/main-before-dashboard-ui =
+de9366dd87dd318bcb8c3d56a1bae7d2e974381b (pushed + verified first). main fast-forwarded de9366d → 173bb0ea (tree ==
+tested 476db3f except PROGRESS_LOG). Release cut bc2c30f1099c01c84a4fb4626aa08b745ab38a34 "Release 0.2.0 (versionCode 4)"
++ release-notes/v0.2.0.md. Release run 41451784579 (release=true, tag=v0.2.0, headSha bc2c30f) success;
+https://github.com/The412Banner/DriverLab/releases/tag/v0.2.0 — Latest, not prerelease, tag → bc2c30f, assets
+DriverLab-v0.2.0-bc2c30f1.apk (41,766,789 B) + .sha256 (downloaded back: OK), aapt: versionCode 4 / versionName 0.2.0,
+notes == release-notes/v0.2.0.md. v0.2.0 contains both feature branches of 2026-11-02 (speed-and-repeat + dashboard-ui).
+Pocket FIT has 476db3fe installed (same code, old version numbers); release APK not installed anywhere.
+Open: Duo / A722 test (sometimes-fails, real GPU faults, picture-check red path); branches kept.
+
 ## 2026-11-02 — dashboard UI (Option B, upright + sideways, blue accent) (feat/dashboard-ui, IN PROGRESS)
 
 **Why:** user asked for compact, more professional tabs/menus, sharper outlines, live graphs; picked from the
