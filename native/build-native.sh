@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Builds DriverLab's two small native libraries with the Android NDK:
+# Builds DriverLab's small native programs with the Android NDK:
 #   libdlvkshim.so  loads a custom Vulkan driver for the CTS (--deqp-vk-library-path)
 #   libdlrec.so     records system-driver GPU submits as .rd.gz (LD_PRELOAD)
+#   libdlbench.so   the speed test (an executable; shaders built with glslangValidator)
 set -euo pipefail
 NDK="${ANDROID_NDK_PATH:?}"
 API="${DE_ANDROID_API:-30}"
@@ -16,6 +17,20 @@ CFLAGS=(-O2 -fPIC -shared -fvisibility=hidden -Wall -Wextra -Wno-unused-paramete
 "$CC" "${CFLAGS[@]}" -o "$OUT/libdlvkshim.so" "$HERE/vkshim/vkshim.c" -ldl
 "$CC" "${CFLAGS[@]}" -o "$OUT/libdlrec.so" "$HERE/dlrec/dlrec.c" -lz
 "$STRIP" --strip-unneeded "$OUT/libdlvkshim.so" "$OUT/libdlrec.so"
+
+# Speed test: GLSL -> SPIR-V headers, then the program (loads Vulkan at run time).
+command -v glslangValidator >/dev/null || { echo "glslangValidator is missing (apt install glslang-tools)" >&2; exit 1; }
+GEN="$(mktemp -d)"
+: > "$GEN/shaders.h"
+for s in "$HERE"/dlbench/shaders/*.vert "$HERE"/dlbench/shaders/*.frag "$HERE"/dlbench/shaders/*.comp; do
+  n="$(basename "$s")"
+  glslangValidator -V --target-env vulkan1.0 --vn "spv_${n//./_}" -o "$GEN/$n.h" "$s" > /dev/null
+  echo "#include \"$n.h\"" >> "$GEN/shaders.h"
+done
+"$CC" -O2 -fPIE -pie -Wall -Wextra -Wno-unused-parameter -Werror -Wl,-z,max-page-size=16384 -Wl,--build-id=sha1 \
+  -I"$GEN" -o "$OUT/libdlbench.so" "$HERE/dlbench/dlbench.c" -ldl -lm
+"$STRIP" --strip-unneeded "$OUT/libdlbench.so"
+rm -rf "$GEN"
 for f in "$OUT"/*.so; do
   echo "== $f"
   "$TC/llvm-readelf" -d "$f" | grep NEEDED

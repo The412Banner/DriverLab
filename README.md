@@ -44,6 +44,9 @@ is loaded only inside DriverLab's own test program. No root needed.
     file in the zip is kept, and the driver's own libraries are loaded from
     its folder. Many of these were built for Android 15 or newer and can't
     load on older Android; the driver card then says so.
+  - **Make a copy** (driver options): the same driver a second time with its
+    own name and settings, for example GMEM on and off, without importing
+    it again.
 - **Game features** (Drivers › controller icon): what DXVK (Direct3D 9–11)
   and VKD3D-Proton (Direct3D 12) need from a driver, taken from their own
   code, plus Shader Model 6.6 (Unreal Engine 5 games), hardware ray tracing
@@ -54,6 +57,27 @@ is loaded only inside DriverLab's own test program. No root needed.
   hangs is marked as such, and the run continues. Settings › Test programs
   at once runs up to one test program per CPU core for faster big runs
   (recording always runs one at a time).
+- **Run each test several times** (1, 3, 5 or 10): some bugs only show up
+  now and then. A test whose runs give different results is marked
+  "sometimes fails", with how many runs passed.
+- **Check for GPU errors** (needs root): reads the kernel log while the tests
+  run and ties GPU faults and hangs to the tests running at that moment. A
+  test can pass while the GPU still reports a fault.
+- **Then also run on** a second driver: the same tests run on both, then
+  Compare opens.
+- **Known to Mesa** (Turnip): failures that Mesa's own Turnip testing also
+  gets, or calls unreliable, are labelled, with a "not known to Mesa" filter
+  for the rest. Mesa has lists for a few Adreno GPUs (618, 660, 702, 750);
+  for others the closest list of the same generation is used and the label
+  says so.
+- **Speed test** (Home): the same small Vulkan scenes on one or two
+  drivers: a spinning cube, filling the screen, textures, many triangles,
+  many draw calls, compute, memory speed, keep-the-picture passes (tile
+  memory) and shader setup. Two drivers take turns (A then B, then B then
+  A) with an optional cool-down pause, and a gap only counts as a win when
+  it is bigger than the variation between rounds (and at least 3%). A small
+  window shows what the driver draws, so a broken picture is easy to spot.
+  The report is saved to Downloads.
 - **Find a setting that fixes it** (Turnip): for a failed or crashed test,
   runs it again once per Mesa debug setting (`TU_DEBUG`, `IR3_SHADER_DEBUG`)
   and shows which ones make it pass; one tap adds a setting to the driver.
@@ -93,6 +117,8 @@ choose **Capture set**, keep **System driver**, turn on
 | `libdlvkshim.so` | lets the CTS load a custom driver: Android HAL (`HMI`) or loader ICD, plus the libraries shipped with it (`native/vkshim`) |
 | `libdlrec.so` | records the device driver's GPU submits as `.rd` and logs its kernel calls (`native/dlrec`) |
 | `libtest_*.so` | the OpenGL ES test programs (`native/gles`, freedreno sources) |
+| `libdlbench.so` | the speed test program, headless Vulkan scenes (`native/dlbench`) |
+| Mesa's known results | Mesa's Turnip test lists, Vulkan lines only (`tools/make_mesa_expect.py`) |
 | test catalog | a compact index of the CTS test list (`tools/make_catalog.py`) |
 | register names | generated from Mesa's register database (`tools/make_regs.py`) |
 

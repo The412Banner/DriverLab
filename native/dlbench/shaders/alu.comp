@@ -1,0 +1,15 @@
+#version 450
+// 256 rounds of two multiply-adds on a vec4 per invocation.
+layout(local_size_x = 64) in;
+layout(std430, set = 0, binding = 0) writeonly buffer Out { vec4 v[]; } o;
+layout(push_constant) uniform PC { vec4 k; } pc;
+void main()
+{
+    uint i = gl_GlobalInvocationID.x;
+    vec4 x = vec4(float(i & 1023u) * 0.001, float((i >> 10) & 1023u) * 0.001, 0.5, 0.25);
+    for (int r = 0; r < 256; r++) {
+        x = x * pc.k.x + pc.k.y;
+        x = x * pc.k.z + pc.k.w;
+    }
+    o.v[i] = x;
+}

@@ -58,7 +58,7 @@ jobs:
         if: steps.cts.outputs.cache-hit != 'true' || steps.native.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq ninja-build zip unzip file
+          sudo apt-get install -y -qq ninja-build zip unzip file glslang-tools
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;${NDK_VERSION}" > /dev/null
           echo "ANDROID_NDK_PATH=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
 
@@ -91,7 +91,7 @@ jobs:
           A=app/src/main/assets/cts
           mkdir -p "$J" "$A/catalog"
           cp cts-out/deqp-vk "$J/libdeqp_vk.so"
-          cp native-out/libdlvkshim.so native-out/libdlrec.so native-out/libtest_*.so "$J/"
+          cp native-out/libdlvkshim.so native-out/libdlrec.so native-out/libdlbench.so native-out/libtest_*.so "$J/"
           mkdir -p app/src/main/assets/gles
           cp native/gles/tests.txt app/src/main/assets/gles/tests.txt
           echo "GLES programs: $(ls "$J"/libtest_*.so | wc -l)"
