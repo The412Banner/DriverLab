@@ -54,8 +54,9 @@ versionCode 3; peer root-e6 told + "done"; settings.xml backed up and restored b
 - Driver copy "Mesa Turnip … r4 (copy)" TU_DEBUG=gmem: files hard-linked (inode 2093857, 2 links).
 - Quick check ×3 on Turnip r4 + then also on the copy: 456/456 runs each, "Each test ran 3 times · same result
   every time", "Fail in all 3 runs — …", Compare button → 152 in both, 152 same.
-- GPU error check: first try Magisk 31.1 rejected uid 10210 silently ("su: request rejected (10210)", no prompt;
-  Magisk app never opened, no shared_prefs) → app said "Could not read the kernel log: Permission denied" (message
+- GPU error check: first try Magisk 31.1 rejected uid 10210 silently ("su: request rejected (10210)", no prompt).
+  CORRECTION (user, verified in the v31.1 release notes 2026-10-25): Magisk 31.1 REMOVED the request prompt; apps must
+  be allowed ahead of time in the Superuser tab — my "Magisk app never opened" guess was wrong → app said "Could not read the kernel log: Permission denied" (message
   improved in 1a9abc0). With the user's "you tap grant": added Magisk policy uid 10210 allow (same as the Termux uids'
   rows). Then "No GPU errors" on both drivers; fake labelled line written to /dev/kmsg mid-run ("kgsl kgsl-3d0:
   DRIVERLAB SELF-TEST fake GPU page fault line (not a real fault)") → GPU errors: 1, tied to the 6 tests running

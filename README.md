@@ -62,7 +62,9 @@ is loaded only inside DriverLab's own test program. No root needed.
   "sometimes fails", with how many runs passed.
 - **Check for GPU errors** (needs root): reads the kernel log while the tests
   run and ties GPU faults and hangs to the tests running at that moment. A
-  test can pass while the GPU still reports a fault.
+  test can pass while the GPU still reports a fault. Allow DriverLab in your
+  root app first: Magisk 31.1 and newer no longer show a request prompt, so
+  switch DriverLab on in Magisk's Superuser tab.
 - **Then also run on** a second driver: the same tests run on both, then
   Compare opens.
 - **Known to Mesa** (Turnip): failures that Mesa's own Turnip testing also

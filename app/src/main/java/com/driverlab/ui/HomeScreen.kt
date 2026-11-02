@@ -465,7 +465,7 @@ private fun RunOptionsCard(settings: AppSettings, second: DriverInfo?, onPickSec
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
                     Text("Check for GPU errors", style = MaterialTheme.typography.titleMedium)
-                    Text("Reads the kernel log for GPU faults and hangs during each test. Needs root.",
+                    Text("Reads the kernel log for GPU faults and hangs during each test. Needs root: allow DriverLab first in your root app (Magisk: Superuser tab).",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Switch(checked = settings.gpuCheck, onCheckedChange = { v -> AppGraph.settings.update { it.copy(gpuCheck = v) } })

@@ -45,7 +45,8 @@ class GpuErrorWatcher(private val onLine: (String) -> Unit) {
             }
             ready.countDown()
         }.apply { isDaemon = true; name = "gpu-errors"; start() }
-        // Magisk asks the user to allow root the first time; give them time to answer.
+        // Older Magisk versions and other root apps show a prompt; give the user time to answer.
+        // Magisk 31.1 and newer never ask: the app must be allowed beforehand in its Superuser tab.
         ready.await(45, TimeUnit.SECONDS)
         if (seenMark.get()) return null
         stop()
@@ -53,7 +54,7 @@ class GpuErrorWatcher(private val onLine: (String) -> Unit) {
         return when {
             first.isEmpty() -> "Root was not granted (no answer from su)"
             first.contains("Permission denied", ignoreCase = true) || first.contains("not allowed", ignoreCase = true) ->
-                "Root was refused. Allow DriverLab in your root app (in Magisk: Superuser) and run again"
+                "Root was refused. Allow DriverLab first in your root app (Magisk: Superuser tab, switch DriverLab on) and run again"
             else -> "Could not read the kernel log: ${first.take(160)}"
         }
     }
