@@ -21,7 +21,16 @@ Motivation: the Adreno 722 GMEM bug showed in 1–3 of 5 runs only, and faulted 
   and runner in the foreground service.
 - CI build → test the native program in a terminal on the Pocket FIT → stage APK → ASK before install.
 
-**Resume point:** branch feat/speed-and-repeat on origin; nothing built yet.
+**Built (app side) a48e713:** repeat rounds (results.tsv column 8 = round; SessionStore.combineRuns →
+"sometimes fails"), GpuErrorWatcher (su -c 'echo mark > /dev/kmsg; exec dmesg -w', lines tied to
+running tests → gpu-errors.tsv), MesaExpect (assets/mesa/expect.tsv from Mesa 01bab930: 186 VK lines,
+lists a618/a660/a6xx/a702/a750; Turnip sessions only, closest list labelled), driver copy (hard links),
+"then also run on" + Compare, SpeedManager/SpeedScreen (alternating rounds, median ± spread, verdict
+only above max(spread, 3 %), preview window reading a raw RGBA file). CI 41424210720 (headSha a48e713)
+= compile check; native benchmark (native/dlbench) is being written in parallel, not committed yet.
+
+**Resume point:** branch feat/speed-and-repeat; app side committed (a48e713), native/dlbench uncommitted
+in the worktree /root/src/DriverLab-wt/speed. Nothing installed.
 
 ## 2026-11-01 — test leftovers cleaned up on the Pocket FIT (user picked the scope)
 
