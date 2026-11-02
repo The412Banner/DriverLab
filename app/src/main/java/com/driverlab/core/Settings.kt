@@ -20,6 +20,12 @@ data class AppSettings(
     /** Full libwrap-style kernel log in each test's output when recording the system driver. */
     val rawKgslLog: Boolean = true,
     val driverId: String = DriverInfo.SYSTEM_ID,
+    /** Run the whole selection this many times; tests with different results are flagged. */
+    val repeat: Int = 1,
+    /** Watch the kernel log for GPU errors during runs (needs root). */
+    val gpuCheck: Boolean = false,
+    /** After the run, run the same tests on this driver too ("" = no). */
+    val secondDriverId: String = "",
 ) {
     val captureCapBytes: Long
         get() = when (captureLevel) {
@@ -55,6 +61,9 @@ class SettingsStore(context: Context) {
         perTestLogLimit = prefs.getInt("perTestLogLimit", 5000),
         rawKgslLog = prefs.getBoolean("rawKgslLog", true),
         driverId = prefs.getString("driverId", DriverInfo.SYSTEM_ID) ?: DriverInfo.SYSTEM_ID,
+        repeat = prefs.getInt("repeat", 1),
+        gpuCheck = prefs.getBoolean("gpuCheck", false),
+        secondDriverId = prefs.getString("secondDriverId", "") ?: "",
     )
 
     fun update(block: (AppSettings) -> AppSettings) {
@@ -72,6 +81,9 @@ class SettingsStore(context: Context) {
             .putInt("perTestLogLimit", s.perTestLogLimit)
             .putBoolean("rawKgslLog", s.rawKgslLog)
             .putString("driverId", s.driverId)
+            .putInt("repeat", s.repeat)
+            .putBoolean("gpuCheck", s.gpuCheck)
+            .putString("secondDriverId", s.secondDriverId)
             .apply()
         _state.value = s
     }

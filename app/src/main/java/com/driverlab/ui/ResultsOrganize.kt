@@ -54,12 +54,29 @@ data class ResultGroup(val key: String, val items: List<TestResult>, val counts:
 
 data class Organized(val flat: List<TestResult>, val groups: List<ResultGroup>?)
 
+/** Extra filters besides the five result buckets. */
+object ExtraFilter {
+    const val FLAKY = "FLAKY"
+    const val GPU_ERRORS = "GPUERR"
+    const val MESA_KNOWN = "MESA"
+    const val NEW_PROBLEMS = "NEW"
+}
+
+fun keep(r: TestResult, filter: String?): Boolean = when (filter) {
+    null -> true
+    ExtraFilter.FLAKY -> r.flaky
+    ExtraFilter.GPU_ERRORS -> r.gpuErrors > 0
+    ExtraFilter.MESA_KNOWN -> r.mesaNote.isNotEmpty()
+    ExtraFilter.NEW_PROBLEMS -> (r.status.bucket == Bucket.FAILED || r.status.bucket == Bucket.CRASHED) && r.mesaNote.isEmpty()
+    else -> r.status.bucket.name == filter
+}
+
 /** Filters, sorts and (optionally) groups a session's results. Groups with problems come first. */
 fun organize(all: List<TestResult>, bucket: String?, query: String, sort: ResultSort, grouped: Boolean): Organized {
     val q = query.trim()
     val words = q.split(' ').filter { it.isNotEmpty() }
     val filtered = all.filter { r ->
-        (bucket == null || r.status.bucket.name == bucket) &&
+        keep(r, bucket) &&
             (words.isEmpty() || words.all { w -> r.name.contains(w, ignoreCase = true) || r.message.contains(w, ignoreCase = true) })
     }
     val sorted = sortResults(filtered, sort)

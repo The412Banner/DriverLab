@@ -45,6 +45,12 @@ class RunManager(
         val rawLog: Boolean = true,
         /** Test programs running at the same time; recording always uses 1. */
         val jobs: Int = 1,
+        /** Run the whole selection this many times (rounds); recording always uses 1. */
+        val repeat: Int = 1,
+        /** Watch the kernel log for GPU errors (needs root). */
+        val gpuCheck: Boolean = false,
+        /** After this driver, run the same tests on this driver too (for Compare). */
+        val thenDriverId: String? = null,
     )
 
     enum class Phase { STARTING, RUNNING, FINISHING, DONE, STOPPED, FAILED }
@@ -66,6 +72,16 @@ class RunManager(
         val exported: List<String> = emptyList(),
         /** Test programs running right now. */
         val running: Int = 0,
+        val round: Int = 1,
+        val rounds: Int = 1,
+        /** Driver 1 or 2 of a two-driver run. */
+        val step: Int = 1,
+        val steps: Int = 1,
+        /** Both sessions of a finished two-driver run, for Compare. */
+        val pairIds: List<String> = emptyList(),
+        /** GPU error check: "" off, "on", or why it could not run. */
+        val gpuCheck: String = "",
+        val gpuErrorLines: Int = 0,
     ) {
         val active: Boolean get() = phase == Phase.STARTING || phase == Phase.RUNNING || phase == Phase.FINISHING
         val fraction: Float get() = if (total <= 0) 0f else (done.toFloat() / total).coerceIn(0f, 1f)
@@ -80,12 +96,17 @@ class RunManager(
 
     val isActive: Boolean get() = _live.value?.active == true
 
+    /** Something else (the speed test) is using the GPU. */
+    var otherBusy: () -> Boolean = { false }
+
     fun start(req: Request): Boolean {
-        if (isActive) return false
+        if (isActive || otherBusy()) return false
         pending = req
         stopFlag.set(false)
-        _live.value = Live("", req.label, drivers.get(req.driverId)?.name ?: "", System.currentTimeMillis(), req.total, 0,
-            Counts(), null, 0, emptyList(), Phase.STARTING, "Starting", req.record)
+        val rounds = if (req.record) 1 else req.repeat.coerceIn(1, MAX_REPEAT)
+        _live.value = Live("", req.label, drivers.get(req.driverId)?.name ?: "", System.currentTimeMillis(), req.total * rounds, 0,
+            Counts(), null, 0, emptyList(), Phase.STARTING, "Starting", req.record, rounds = rounds,
+            steps = if (req.thenDriverId != null && req.thenDriverId != req.driverId) 2 else 1)
         val i = Intent(context, RunService::class.java)
         context.startForegroundService(i)
         return true
@@ -104,10 +125,20 @@ class RunManager(
     suspend fun runPending(scope: CoroutineScope) {
         val req = pending ?: return
         pending = null
-        withContext(Dispatchers.IO) { Engine(req).run(scope) }
+        withContext(Dispatchers.IO) {
+            val second = req.thenDriverId?.takeIf { it != req.driverId && drivers.get(it) != null }
+            val steps = if (second != null) 2 else 1
+            val a = Engine(req, 1, steps)
+            val state = a.run(scope)
+            if (second != null && state == SessionState.FINISHED && !stopFlag.get() && a.hasId) {
+                val b = Engine(req.copy(driverId = second, thenDriverId = null), 2, 2, pairWith = a.id)
+                b.run(scope)
+                if (b.hasId) sessions.get(a.id)?.let { sessions.writeMeta(it.copy(pairId = b.id)) }
+            }
+        }
     }
 
-    private inner class Engine(val req: Request) {
+    private inner class Engine(val req: Request, val step: Int = 1, val steps: Int = 1, val pairWith: String = "") {
         val driver = drivers.get(req.driverId)
         val lib = driver?.let { drivers.libFile(it) }
         val startedAt = System.currentTimeMillis()
@@ -132,24 +163,55 @@ class RunManager(
         val lock = Any()
         @Volatile var anyRan = false
         val perTestFiles = req.record || req.total <= req.perTestLogLimit
+        val rounds = if (req.record) 1 else req.repeat.coerceIn(1, MAX_REPEAT)
+        val runTotal = req.total * rounds
+        @Volatile var round = 1
+        val hasId: Boolean get() = ::id.isInitialized
+
+        // GPU error check: tests running now, and when recent ones ended, to know whose error a line is.
+        val runningTests = ConcurrentHashMap<String, Long>()
+        val recentDone = ArrayDeque<Pair<String, Long>>()
+        var watcher: GpuErrorWatcher? = null
+        @Volatile var gpuState = ""
+        @Volatile var gpuLines = 0
+        val gpuTests = HashSet<String>()
+        var gpuOut: BufferedWriter? = null
 
         fun publish(exported: List<String> = emptyList()) {
             val r = synchronized(recent) { recent.toList() }
             _live.value = Live(
-                if (::id.isInitialized) id else "", req.label, driver?.name ?: "", startedAt, req.total, done,
+                if (::id.isInitialized) id else "", req.label, driver?.name ?: "", startedAt, runTotal, done,
                 counts, current, currentSince, r, phase, message, req.record, exported, running.get(),
+                round, rounds, step, steps, if (steps > 1 && step == steps && hasId && pairWith.isNotEmpty()) listOf(pairWith, id) else emptyList(),
+                gpuState, gpuLines,
             )
         }
 
-        suspend fun run(scope: CoroutineScope) {
+        /** A GPU error line from the kernel log: blamed on the tests running then (or just finished). */
+        fun onGpuError(line: String) = synchronized(lock) {
+            val now = System.currentTimeMillis()
+            var who = runningTests.keys.toList()
+            if (who.isEmpty()) who = synchronized(recentDone) { recentDone.filter { now - it.second < 1500 }.map { it.first } }
+            gpuLines++
+            gpuTests += who
+            val out = gpuOut ?: File(dir, SessionStore.GPU_ERRORS).bufferedWriter().also {
+                it.write("# time_ms\ttests\tline\n"); gpuOut = it
+            }
+            out.write("$now\t${who.joinToString("|")}\t${line.replace('\t', ' ')}\n")
+            out.flush()
+            log.write("[${Fmt.stamp(now)}] GPU ERROR            ${if (who.isEmpty()) "(between tests)" else who.joinToString(", ")}: $line\n")
+        }
+
+        /** Returns how the session ended. */
+        suspend fun run(scope: CoroutineScope): SessionState {
             if (driver == null) {
-                phase = Phase.FAILED; message = "The selected driver is no longer installed."; publish(); return
+                phase = Phase.FAILED; message = "The selected driver is no longer installed."; publish(); return SessionState.FAILED
             }
             if (setup.state.value !is CtsSetup.State.Ready) {
-                phase = Phase.FAILED; message = "Test data is not ready yet."; publish(); return
+                phase = Phase.FAILED; message = "Test data is not ready yet."; publish(); return SessionState.FAILED
             }
             if (!driver.isSystem && (lib == null || !lib.exists())) {
-                phase = Phase.FAILED; message = "The driver file is missing. Import it again."; publish(); return
+                phase = Phase.FAILED; message = "The driver file is missing. Import it again."; publish(); return SessionState.FAILED
             }
             id = Fmt.sessionStamp(startedAt) + "-" + Fmt.slug(driver.name)
             var n = 2
@@ -158,8 +220,15 @@ class RunManager(
             listOf("qpa", "output", "tests", "captures").forEach { File(dir, it).mkdirs() }
             tsv = File(dir, "results.tsv").bufferedWriter()
             log = File(dir, "results.log").bufferedWriter()
-            tsv.write("# name\tstatus\tmessage\tduration_ms\tfinished_at_ms\tbatch\tcapture\n")
-            writeHeader()
+            tsv.write("# name\tstatus\tmessage\tduration_ms\tfinished_at_ms\tbatch\tcapture\tround\n")
+            if (req.gpuCheck) {
+                message = "Asking for root for the GPU error check"
+                publish()
+                val w = GpuErrorWatcher { onGpuError(it) }
+                val err = w.start()
+                if (err == null) { watcher = w; gpuState = "on" } else gpuState = err
+            }
+            synchronized(lock) { writeHeader() }
             saveMeta(SessionState.RUNNING, "")
 
             phase = Phase.RUNNING
@@ -169,6 +238,9 @@ class RunManager(
             }
             val failureRef = AtomicReference<String?>(null)
             try {
+              for (r in 1..rounds) {
+                if (stopFlag.get() || failureRef.get() != null) break
+                round = r
                 // One or more workers take items from a queue: a batch of CTS tests, or one GLES
                 // program (one per process). With one worker the order is the catalog order.
                 val size = when {
@@ -204,6 +276,7 @@ class RunManager(
                         queue.close()
                     }
                 }
+              }
             } catch (e: Exception) {
                 failureRef.compareAndSet(null, "Run error: ${e.message}")
             } finally {
@@ -214,15 +287,28 @@ class RunManager(
             phase = Phase.FINISHING
             message = "Saving results"
             publish()
+            watcher?.let {
+                // Late lines for the last tests.
+                delay(1500)
+                it.stop()
+            }
             val state = when {
                 failure != null -> SessionState.FAILED
                 stopFlag.get() -> SessionState.STOPPED
                 else -> SessionState.FINISHED
             }
-            writeFooter(state, failure)
+            runCatching { tsv.flush() }
+            var flaky = 0
+            if (rounds > 1) {
+                val (c, f) = sessions.combinedCounts(id)
+                counts = c
+                flaky = f
+            }
+            synchronized(lock) { runCatching { gpuOut?.close() } }
+            writeFooter(state, failure, flaky)
             runCatching { tsv.close() }
             runCatching { log.close() }
-            var meta = saveMeta(state, failure ?: "")
+            var meta = saveMeta(state, failure ?: "", flaky)
             var exported = emptyList<String>()
             try {
                 val bundles = sessions.buildBundles(meta)
@@ -237,17 +323,25 @@ class RunManager(
                 meta = meta.copy(message = (meta.message + " Export failed: ${e.message}").trim())
                 sessions.writeMeta(meta)
             }
-            phase = when (state) {
-                SessionState.FINISHED -> Phase.DONE
-                SessionState.STOPPED -> Phase.STOPPED
+            val next = if (state == SessionState.FINISHED && step < steps) req.thenDriverId?.let { drivers.get(it)?.name } else null
+            phase = when {
+                next != null -> Phase.STARTING
+                state == SessionState.FINISHED -> Phase.DONE
+                state == SessionState.STOPPED -> Phase.STOPPED
                 else -> Phase.FAILED
             }
-            message = failure ?: if (exported.isNotEmpty()) "Saved to Download/DriverLab/${Fmt.day(startedAt)}" else null
+            message = when {
+                failure != null -> failure
+                next != null -> "Next: the same tests on $next"
+                exported.isNotEmpty() -> "Saved to Download/DriverLab/${Fmt.day(startedAt)}"
+                else -> null
+            }
             publish(exported)
             work.deleteRecursively()
+            return state
         }
 
-        fun saveMeta(state: SessionState, msg: String): SessionMeta {
+        fun saveMeta(state: SessionState, msg: String, flaky: Int = 0): SessionMeta {
             val d = driver!!
             val m = SessionMeta(
                 id = id, label = req.label, driverId = d.id, driverName = d.name,
@@ -256,7 +350,8 @@ class RunManager(
                 startedAt = startedAt, finishedAt = if (state == SessionState.RUNNING) 0 else System.currentTimeMillis(),
                 state = state, totalTests = req.total, counts = counts, record = req.record,
                 captureCapBytes = req.captureCapBytes, ctsTag = setup.ctsTag, env = d.env, message = msg,
-                exports = emptyList(),
+                exports = emptyList(), repeat = rounds, flaky = flaky, gpuCheck = gpuState,
+                gpuErrorLines = gpuLines, gpuErrorTests = synchronized(lock) { gpuTests.size }, pairId = pairWith,
             )
             sessions.writeMeta(m)
             return m
@@ -276,18 +371,27 @@ class RunManager(
                 add("Selection: ${req.label} — ${Fmt.count(req.total)} tests")
                 add("Recording: " + if (req.record) "on (${if (req.captureCapBytes == 0L) "all buffers" else "buffers up to " + Fmt.size(req.captureCapBytes)})" else "off")
                 add("Timeout:   ${req.timeoutSec} s per test")
+                if (rounds > 1) add("Repeat:    every test runs $rounds times")
+                if (req.gpuCheck) add("GPU check: " + if (gpuState == "on") "kernel log watched for GPU errors (root)" else "off — $gpuState")
+                if (steps > 1) add("Run:       driver $step of $steps (same tests on both, for Compare)")
                 add("-".repeat(78))
             }
             log.write(lines.joinToString("\n") + "\n")
             log.flush()
         }
 
-        fun writeFooter(state: SessionState, failure: String?) {
+        fun writeFooter(state: SessionState, failure: String?, flaky: Int) {
             val c = counts
             val end = System.currentTimeMillis()
             log.write("-".repeat(78) + "\n")
             log.write("Finished:  ${Fmt.stamp(end)} (${state.name.lowercase()}, ${Fmt.duration(end - startedAt)})\n")
-            log.write("Results:   ${c.passed} passed, ${c.failed} failed, ${c.crashed} crashed/timeout, ${c.warning} warnings, ${c.skipped} not supported — ${Fmt.count(done)} of ${Fmt.count(req.total)} tests\n")
+            if (rounds > 1) {
+                log.write("Results:   ${c.passed} passed, ${c.failed} failed, ${c.crashed} crashed/timeout, ${c.warning} warnings, ${c.skipped} not supported — per test, worst run counts\n")
+                log.write("Runs:      ${Fmt.count(done)} of ${Fmt.count(runTotal)} ($rounds per test); $flaky tests had different results in different runs\n")
+            } else {
+                log.write("Results:   ${c.passed} passed, ${c.failed} failed, ${c.crashed} crashed/timeout, ${c.warning} warnings, ${c.skipped} not supported — ${Fmt.count(done)} of ${Fmt.count(req.total)} tests\n")
+            }
+            if (gpuState == "on") log.write("GPU errors: $gpuLines kernel log lines during ${synchronized(lock) { gpuTests.size }} tests\n")
             failure?.let { log.write("Problem:   $it\n") }
             log.flush()
         }
@@ -297,13 +401,18 @@ class RunManager(
             recLog: File?, capture: String?, rawOut: File? = null, batch: Int = 0,
         ) = synchronized(lock) {
             val now = System.currentTimeMillis()
-            val r = TestResult(name, status, msg, if (started > 0) now - started else 0, now, batch, capture)
+            runningTests.remove(name)
+            if (watcher != null) synchronized(recentDone) {
+                recentDone.addLast(name to now)
+                while (recentDone.size > 64) recentDone.removeFirst()
+            }
+            val r = TestResult(name, status, msg, if (started > 0) now - started else 0, now, batch, capture, round)
             tsv.write(SessionStore.resultLine(r)); tsv.write("\n")
             val tag = status.key.uppercase().padEnd(20)
             log.write("[${Fmt.stamp(now)}] $tag ${Fmt.duration(r.durationMs).padStart(9)}  $name${if (msg.isNotEmpty()) " — $msg" else ""}\n")
             if (done % 50 == 0L) { tsv.flush(); log.flush() }
             if (perTestFiles) {
-                val f = File(dir, "tests/${SessionStore.fileBase(name)}.log")
+                val f = File(dir, "tests/${SessionStore.fileBase(name)}${if (round > 1) "~r$round" else ""}.log")
                 f.bufferedWriter().use { w ->
                     w.write("test: $name\nstatus: ${status.key}${if (msg.isNotEmpty()) " ($msg)" else ""}\nduration: ${r.durationMs} ms\nfinished: ${Fmt.stamp(now)}\ndriver: ${driver!!.name}\n")
                     if (recLog != null && recLog.exists()) {
@@ -343,6 +452,7 @@ class RunManager(
             val started = System.currentTimeMillis()
             current = name
             currentSince = started
+            runningTests[name] = started
             val p = try {
                 CtsRunner(context).startGles(
                     exe,
@@ -519,6 +629,7 @@ class RunManager(
                                     cur = parsed.name; curStart = System.currentTimeMillis(); slice.setLength(0)
                                     slice.append(line).append('\n')
                                     runningSince.set(curStart); runningTest.set(parsed.name)
+                                    runningTests[parsed.name] = curStart
                                     current = parsed.name; currentSince = curStart
                                 }
                                 is CtsRunner.Line.Result -> {
@@ -618,6 +729,10 @@ class RunManager(
         fun signalName(s: Int) = when (s) {
             4 -> " SIGILL"; 6 -> " SIGABRT"; 7 -> " SIGBUS"; 9 -> " SIGKILL"; 11 -> " SIGSEGV"; else -> ""
         }
+    }
+
+    companion object {
+        const val MAX_REPEAT = 20
     }
 
     private data class Stash(val name: String, val status: TestStatus, val message: String, val started: Long, val stdout: String)

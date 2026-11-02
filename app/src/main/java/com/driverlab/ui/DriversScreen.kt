@@ -73,6 +73,7 @@ fun DriversScreen(nav: NavHostController) {
     var importing by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<DriverInfo?>(null) }
     var deleting by remember { mutableStateOf<DriverInfo?>(null) }
+    var copying by remember { mutableStateOf<DriverInfo?>(null) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
             importing = true
@@ -135,7 +136,47 @@ fun DriversScreen(nav: NavHostController) {
                 }
             },
             confirmButton = { TextButton(onClick = { AppGraph.drivers.updateEnv(d.id, text); editing = null }) { Text("Save") } },
-            dismissButton = { TextButton(onClick = { editing = null }) { Text("Cancel") } },
+            dismissButton = {
+                Row {
+                    if (!d.isSystem) TextButton(onClick = { editing = null; copying = d }) { Text("Make a copy") }
+                    TextButton(onClick = { editing = null }) { Text("Cancel") }
+                }
+            },
+        )
+    }
+    copying?.let { d ->
+        var name by remember(d.id) { mutableStateOf(d.name + " (copy)") }
+        var env by remember(d.id) { mutableStateOf(if (Regex("(?i)TU_DEBUG=.*\\bsysmem\\b").containsMatchIn(d.env)) "TU_DEBUG=gmem" else "TU_DEBUG=sysmem") }
+        var busy by remember(d.id) { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = { if (!busy) copying = null },
+            title = { Text("Copy with other settings") },
+            text = {
+                Column {
+                    Text("Adds the same driver a second time with its own name and settings, without importing it again, " +
+                        "for example GMEM on and off. Run the same tests on both, then compare them.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Name") }, singleLine = true)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(env, { env = it }, Modifier.fillMaxWidth().heightIn(min = 120.dp), textStyle = MonoSmall,
+                        label = { Text("Settings, one per line") })
+                    if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = !busy, onClick = {
+                    scope.launch {
+                        busy = true
+                        AppGraph.drivers.copy(d.id, name, env)
+                            .onSuccess { Toast.makeText(context, "Added ${it.name}", Toast.LENGTH_SHORT).show() }
+                            .onFailure { Toast.makeText(context, "Could not copy: ${it.message}", Toast.LENGTH_LONG).show() }
+                        busy = false
+                        copying = null
+                    }
+                }) { Text("Add copy") }
+            },
+            dismissButton = { TextButton(enabled = !busy, onClick = { copying = null }) { Text("Cancel") } },
         )
     }
     deleting?.let { d ->

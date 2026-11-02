@@ -44,6 +44,13 @@ class CtsRunner(private val context: Context) {
         return pb.start()
     }
 
+    /** Starts another DriverLab program (the speed test) with the same driver setup as the CTS. */
+    fun startProgram(exe: File, args: List<String>, driver: DriverInfo, driverLib: File?, workDir: File): Process {
+        val pb = ProcessBuilder(listOf(exe.absolutePath) + args).directory(workDir).redirectErrorStream(true)
+        applyEnv(pb.environment(), Launch(caselist = File(workDir, "none"), qpa = File(workDir, "none"), driver = driver, driverLib = driverLib, workDir = workDir))
+        return pb.start()
+    }
+
     fun start(l: Launch): Process {
         val cmd = ArrayList<String>()
         cmd += Paths.deqp(context).absolutePath

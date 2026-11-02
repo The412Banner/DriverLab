@@ -1,0 +1,187 @@
+# Mesa 01bab9302a6bf0a082c7ba8c49d74427cf10b0cf src/freedreno/ci: list, mode, kind, pattern, status
+a618		fail	dEQP-VK.fragment_operations.early_fragment.sample_count_early_fragment_tests_depth_alpha_to_coverage_samples_2_maintenance5	Fail
+a618		fail	dEQP-VK.fragment_operations.early_fragment.sample_count_early_fragment_tests_depth_alpha_to_coverage_samples_4_maintenance5	Fail
+a618		fail	dEQP-VK.fragment_operations.early_fragment.sample_count_early_fragment_tests_depth_samples_2	Fail
+a618		fail	dEQP-VK.fragment_operations.early_fragment.sample_count_early_fragment_tests_depth_samples_2_maintenance5	Fail
+a618		fail	dEQP-VK.fragment_operations.early_fragment.sample_count_early_fragment_tests_depth_samples_4	Fail
+a618		fail	dEQP-VK.fragment_operations.early_fragment.sample_count_early_fragment_tests_depth_samples_4_maintenance5	Fail
+a618		flake	dEQP-VK.binding_model.shader_access.*geometry.*	
+a618		flake	dEQP-VK.binding_model.shader_access.*tess_ctrl.*	
+a618		flake	dEQP-VK.binding_model.shader_access.*tess_eval.*	
+a618		flake	dEQP-VK.clipping.user_defined.clip_cull_distance.*geom.*	
+a618		flake	dEQP-VK.clipping.user_defined.clip_cull_distance.*tess.*	
+a618		flake	dEQP-VK.clipping.user_defined.clip_distance.*geom.*	
+a618		flake	dEQP-VK.clipping.user_defined.clip_distance.*tess.*	
+a618		flake	dEQP-VK.draw.dynamic_rendering.*multi_draw.*geom.*	
+a618		flake	dEQP-VK.draw.dynamic_rendering.*multi_draw.*tess.*	
+a618		flake	dEQP-VK.draw.dynamic_rendering.primary_cmd_buff.instanced.dynamic_state_draw_vk_primitive_topology_triangle_strip_attrib_divisor_2	
+a618		flake	dEQP-VK.draw.dynamic_rendering.primary_cmd_buff.shader_layer.tessellation_shader_4	
+a618		flake	dEQP-VK.dynamic_rendering.primary_cmd_buff.random.seed46_geometry	
+a618		flake	dEQP-VK.dynamic_rendering.primary_cmd_buff.random.seed88_geometry	
+a618		flake	dEQP-VK..*.suballocation.multisample_resolve.layers_[36].*	
+a618		flake	dEQP-VK.fragment_operations.scissor.multi_viewport.*	
+a618		flake	dEQP-VK.glsl.builtin.function.integer.bitfieldinsert.uvec3_mediump_geometry	
+a618		flake	dEQP-VK.glsl.builtin.function.integer.bitfieldreverse.uint_mediump_geometry	
+a618		flake	dEQP-VK.glsl.builtin.function.integer.umulextended.uvec4_highp_tess_eval	
+a618		flake	dEQP-VK.pipeline.*.interface_matching.vector_length.*tesc.*	
+a618		flake	dEQP-VK.pipeline.pipeline_library.extended_dynamic_state.after_pipelines.rasterization_stream_none_to_one	
+a618		flake	dEQP-VK.pipeline.pipeline_library.extended_dynamic_state.before_draw.2_scissors_switch	
+a618		flake	dEQP-VK.spirv_assembly.instruction.graphics.*geom.*	
+a618		flake	dEQP-VK.spirv_assembly.instruction.graphics.*tess.*	
+a618		flake	dEQP-VK.spirv_assembly.type.*geom.*	
+a618		flake	dEQP-VK.spirv_assembly.type.*tess.*	
+a618		flake	dEQP-VK.synchronization.*_geometry.*	
+a618		flake	dEQP-VK.synchronization.*_tess_ctrl.*	
+a618		flake	dEQP-VK.synchronization.*_tess_control.*	
+a618		flake	dEQP-VK.synchronization.*_tess_eval.*	
+a618		flake	dEQP-VK.tessellation.invariance.*	
+a618		flake	dEQP-VK.tessellation.tesscoord.*	
+a618	android	flake	dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.with_template.sampler_mutable.no_access.single_descriptor.2d_array_base_mip	
+a618	android	flake	dEQP-VK.pipeline.fast_linked_library.stencil.nocolor.format.d24_unorm_s8_uint.states.fail_wrap.pass_decc.dfail_decc.comp_never.any	
+a618	android	flake	dEQP-VK.pipeline.fast_linked_library.stencil.nocolor.format.s8_uint.states.fail_repl.pass_decw.dfail_inv.comp_never.any	
+a618	android	flake	dEQP-VK.pipeline.pipeline_library.stencil.nocolor.format.d32_sfloat_s8_uint_separate_layouts.states.fail_incc.pass_decw.dfail_keep.comp_never.any	
+a618	android	flake	dEQP-VK.renderpasses.renderpass1.dedicated_allocation.formats.r16g16_uint.input.clear.dont_care.self_dep_draw_use_input_aspect_ms	
+a618	asan	skip	dEQP-VK.image.swapchain_mutable.*	
+a618	asan	skip	dEQP-VK.wsi.*	
+a618	gmem	skip	dEQP-VK.wsi.direct_drm.*	
+a618	awsi	skip	dEQP-VK.wsi.android.incremental_present.*	
+a660		fail	dEQP-VK.info.device_extension_dependencies	Fail
+a660		fail	dEQP-VK.subgroups.shader_quad_control.terminated_invocation	Fail
+a660		flake	dEQP-VK.binding_model.shader_access.*geometry.*	
+a660		flake	dEQP-VK.binding_model.shader_access.*tess_ctrl.*	
+a660		flake	dEQP-VK.binding_model.shader_access.*tess_eval.*	
+a660		flake	dEQP-VK.clipping.user_defined.clip_cull_distance.*geom.*	
+a660		flake	dEQP-VK.clipping.user_defined.clip_cull_distance.*tess.*	
+a660		flake	dEQP-VK.clipping.user_defined.clip_distance.*geom.*	
+a660		flake	dEQP-VK.clipping.user_defined.clip_distance.*tess.*	
+a660		flake	dEQP-VK.draw.dynamic_rendering.*multi_draw.*geom.*	
+a660		flake	dEQP-VK.draw.dynamic_rendering.*multi_draw.*tess.*	
+a660		flake	dEQP-VK.draw.dynamic_rendering.primary_cmd_buff.instanced.dynamic_state_draw_vk_primitive_topology_triangle_strip_attrib_divisor_2	
+a660		flake	dEQP-VK.draw.dynamic_rendering.primary_cmd_buff.shader_layer.tessellation_shader_4	
+a660		flake	dEQP-VK.dynamic_rendering.primary_cmd_buff.random.seed46_geometry	
+a660		flake	dEQP-VK.dynamic_rendering.primary_cmd_buff.random.seed88_geometry	
+a660		flake	dEQP-VK..*.suballocation.multisample_resolve.layers_[36].*	
+a660		flake	dEQP-VK.fragment_operations.scissor.multi_viewport.*	
+a660		flake	dEQP-VK.glsl.builtin.function.integer.bitfieldinsert.uvec3_mediump_geometry	
+a660		flake	dEQP-VK.glsl.builtin.function.integer.bitfieldreverse.uint_mediump_geometry	
+a660		flake	dEQP-VK.glsl.builtin.function.integer.umulextended.uvec4_highp_tess_eval	
+a660		flake	dEQP-VK.pipeline.*.interface_matching.vector_length.*tesc.*	
+a660		flake	dEQP-VK.pipeline.pipeline_library.extended_dynamic_state.after_pipelines.rasterization_stream_none_to_one	
+a660		flake	dEQP-VK.pipeline.pipeline_library.extended_dynamic_state.before_draw.2_scissors_switch	
+a660		flake	dEQP-VK.spirv_assembly.instruction.graphics.*geom.*	
+a660		flake	dEQP-VK.spirv_assembly.instruction.graphics.*tess.*	
+a660		flake	dEQP-VK.spirv_assembly.type.*geom.*	
+a660		flake	dEQP-VK.spirv_assembly.type.*tess.*	
+a660		flake	dEQP-VK.synchronization.*_geometry.*	
+a660		flake	dEQP-VK.synchronization.*_tess_ctrl.*	
+a660		flake	dEQP-VK.synchronization.*_tess_control.*	
+a660		flake	dEQP-VK.synchronization.*_tess_eval.*	
+a660		flake	dEQP-VK.tessellation.invariance.*	
+a660		flake	dEQP-VK.reconvergence.workgroup_uniform_control_flow_ballot.compute.nesting4.7.38	
+a660		flake	dEQP-VK.query_pool.statistics_query.host_query_reset.geometry_shader_primitives.secondary.64bits_cmdcopyquerypoolresults_triangle_list_clear_depth	
+a660		flake	dEQP-VK.subgroups.shuffle.graphics.subgroupshufflexor_int64_t_constant	
+a660		flake	dEQP-VK.subgroups.shuffle.framebuffer.subgroupshuffle_bool_tess_control	
+a660		flake	dEQP-VK.synchronization.internally_synchronized_objects.pipeline_cache_graphics	
+a660	gmem	skip	dEQP-VK.memory.mapping.suballocation.full.variable.implicit_unmap	
+a6xx		skip	dEQP-VK.video.*	
+a702		fail	dEQP-VK.conditional_rendering.draw_clear.draw.update_with_rendering_discard_host_memory	Crash
+a702		fail	dEQP-VK.conditional_rendering.draw_clear.draw.update_with_rendering_discard_local_memory	Crash
+a702		fail	dEQP-VK.conditional_rendering.draw_clear.draw.update_with_rendering_no_discard_host_memory	Crash
+a702		fail	dEQP-VK.conditional_rendering.draw_clear.draw.update_with_rendering_no_discard_local_memory	Crash
+a702		fail	dEQP-VK.fragment_operations.early_fragment.sample_count_early_fragment_tests_depth_alpha_to_coverage_samples_2_maintenance5	Fail
+a702		fail	dEQP-VK.fragment_operations.early_fragment.sample_count_early_fragment_tests_depth_samples_2	Fail
+a702		fail	dEQP-VK.fragment_operations.early_fragment.sample_count_early_fragment_tests_depth_samples_2_maintenance5	Fail
+a702		fail	dEQP-VK.glsl.logical_copy.initialized_struct	Crash
+a702		fail	dEQP-VK.glsl.logical_copy.undefined_memory	Crash
+a702	gmem	fail	dEQP-VK.glsl.logical_copy.undefined_memory	Crash
+a702		fail	dEQP-VK.glsl.shader_clock.compute.clock2x32ARB	Crash
+a702		fail	dEQP-VK.glsl.shader_clock.compute.clockRealtimeEXT	Crash
+a702		fail	dEQP-VK.glsl.shader_clock.fragment.clock2x32ARB	Crash
+a702		fail	dEQP-VK.glsl.shader_clock.fragment.clockARB	Crash
+a702		fail	dEQP-VK.glsl.shader_clock.fragment.clockRealtime2x32EXT	Crash
+a702		fail	dEQP-VK.glsl.shader_clock.fragment.clockRealtimeEXT	Crash
+a702		fail	dEQP-VK.glsl.shader_clock.vertex.clockARB	Crash
+a702		fail	dEQP-VK.glsl.shader_clock.vertex.clockRealtimeEXT	Crash
+a702	gmem	fail	dEQP-VK.glsl.shader_clock.vertex.clockARB	Crash
+a702		fail	dEQP-VK.shader_object.misc.state.pipeline.vert.depth.bias	Fail
+a702		fail	dEQP-VK.shader_object.misc.state.pipeline.vert_frag.depth.bias	Fail
+a702	gmem	fail	dEQP-VK.shader_object.misc.state.pipeline.vert.depth.bias	Fail
+a702		fail	dEQP-VK.ycbcr.copy.a1b5g5r5_unorm_pack16.g8_b8r8_2plane_420_unorm.optimal_optimal	Fail
+a702		fail	dEQP-VK.ycbcr.copy.a4b4g4r4_unorm_pack16.g8_b8r8_2plane_420_unorm.optimal_optimal	Fail
+a702		fail	dEQP-VK.ycbcr.copy.b5g6r5_unorm_pack16.g8_b8r8_2plane_420_unorm.optimal_optimal	Fail
+a702		fail	dEQP-VK.ycbcr.copy.r16_unorm.g8_b8r8_2plane_420_unorm.optimal_optimal	Fail
+a702	gmem	fail	dEQP-VK.ycbcr.copy.a4b4g4r4_unorm_pack16.g8_b8r8_2plane_420_unorm.optimal_optimal	Fail
+a702	gmem	fail	dEQP-VK.memory.pipeline_barrier.host_write_storage_buffer.1048576	Fail
+a702	gmem	fail	dEQP-VK.memory.pipeline_barrier.host_write_storage_texel_buffer.1024	Fail
+a702	gmem	fail	dEQP-VK.memory.pipeline_barrier.host_write_storage_texel_buffer.1048576	Fail
+a702	gmem	fail	dEQP-VK.memory.pipeline_barrier.host_write_storage_texel_buffer.65536	Fail
+a702	gmem	fail	dEQP-VK.memory.pipeline_barrier.host_write_uniform_texel_buffer.1024	Fail
+a702	gmem	fail	dEQP-VK.memory.pipeline_barrier.host_write_uniform_texel_buffer.65536	Fail
+a702		fail	dEQP-VK.sparse_resources.buffer.ssbo.read_write.sparse_residency_non_resident_strict	Fail
+a702	gmem	fail	dEQP-VK.sparse_resources.buffer.ssbo.read_write.sparse_residency_non_resident_strict	Fail
+a702		flake	dEQP-VK.pipeline.fast_linked_library.attachment_feedback_loop_layout.sampler.attachment_feedback_loop_optimal.sampled_image.image_type.2d_array.format.s8_uint_stencil_read_dynamic_bad_static	
+a702		flake	dEQP-VK.glsl.shader_clock.compute.clockRealtime2x32EXT	
+a702		flake	dEQP-VK.glsl.shader_clock.fragment.clockRealtime2x32EXT	
+a702		flake	dEQP-VK.glsl.shader_clock.vertex.clock2x32ARB	
+a702		skip	dEQP-VK.api.buffer.basic\.*	
+a702		skip	dEQP-VK.image.host_image_copy.large_images.image_to_memory_d32_sfloat_4096_4096	
+a702		skip	dEQP-VK.image.host_image_copy.large_images.image_to_memory_r10x6_unorm_pack16_4096_4096	
+a702		skip	dEQP-VK.image.host_image_copy.large_images.image_to_memory_r16_unorm_4096_4096	
+a702		skip	dEQP-VK.image.host_image_copy.large_images.image_to_memory_r32_sfloat_4096_4096	
+a702		skip	dEQP-VK.image.host_image_copy.large_images.image_to_memory_r8_unorm_4096_4096	
+a702		skip	dEQP-VK.image.host_image_copy.large_images.image_to_memory_r8g8_unorm_4096_4096	
+a702		skip	dEQP-VK.image.host_image_copy.large_images.image_to_memory_r8g8b8a8_unorm_4096_4096	
+a702		skip	dEQP-VK.image.host_image_copy.large_images.memory_to_image_d32_sfloat_4096_4096	
+a702		skip	dEQP-VK.image.host_image_copy.large_images.memory_to_image_r10x6_unorm_pack16_4096_4096	
+a702		skip	dEQP-VK.image.host_image_copy.large_images.memory_to_image_r16_unorm_4096_4096	
+a702		skip	dEQP-VK.image.host_image_copy.large_images.memory_to_image_r32_sfloat_4096_4096	
+a702		skip	dEQP-VK.image.host_image_copy.large_images.memory_to_image_r8_unorm_4096_4096	
+a702		skip	dEQP-VK.image.host_image_copy.large_images.memory_to_image_r8g8_unorm_4096_4096	
+a702		skip	dEQP-VK.image.host_image_copy.large_images.memory_to_image_r8g8b8a8_unorm_4096_4096	
+a702		skip	dEQP-VK.sparse_resources.image_sparse_binding.multiple_bind_sparse_info.cube_array.rgba32ui.256_256_6	
+a702		skip	dEQP-VK.sparse_resources.image_sparse_binding.multiple_bind_sparse_info.cube_array.rgba8.128_128_8	
+a702		skip	dEQP-VK.rasterization.primitive_size.points.point_size_8192	
+a702		skip	dEQP-VK.compute.pipeline.zero_initialize_workgroup_memory.max_workgroup_memory\.*	
+a702		skip	dEQP-VK.wsi.direct_drm.*	
+a702		skip	dEQP-VK.wsi.acquire_drm_display.*	
+a702		skip	dEQP-VK.api.image_compression_control.swapchain.direct_drm.*	
+a702		skip	dEQP-VK.api.image_compression_control.swapchain.direct.disabled	
+a750		fail	dEQP-VK.pipeline.monolithic.timestamp.calibrated.calibration_test	Fail
+a750		fail	dEQP-VK.pipeline.monolithic.timestamp.calibrated.dev_domain_test	Fail
+a750	gmem	fail	dEQP-VK.pipeline.monolithic.timestamp.calibrated.dev_domain_test	Fail
+a750		flake	dEQP-VK.api.buffer_memory_requirements.create_sparse_binding_sparse_residency.ext_mem_flags_excluded.method1.size_req_storage_usage_bits	
+a750		flake	dEQP-VK.api.image_clearing.core.clear_color_image.2d.optimal.single_layer.r16g16_unorm_1x33_multiple_subresourcerange	
+a750		flake	dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.with_push.storage_image.vertex.multiple_contiguous_descriptors.2d_array	
+a750		flake	dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.with_push_template.combined_image_sampler_mutable.vertex_fragment.multiple_arbitrary_descriptors.2d_base_slice	
+a750		flake	dEQP-VK.binding_model.shader_access.secondary_cmd_buf.bind.sampler_mutable.vertex.multiple_descriptor_sets.multiple_discontiguous_descriptors.1d_base_slice	
+a750		flake	dEQP-VK.fragment_shading_rate.renderpass2.fast_linked_library.sampleshadingenable.dynamic.attachment.shaderrate.keep.keep.1x1.samples1.gs	
+a750		flake	dEQP-VK.glsl.builtin.precision_fp16_storage32b.distance.compute.vec4	
+a750		flake	dEQP-VK.glsl.texture_gather.offset.min_required_offset.2d.rgba8i.size_pot.mirrored_repeat_clamp_to_edge	
+a750		flake	dEQP-VK.image.host_image_copy.identical_memory_layout.linear.d32_sfloat	
+a750		flake	dEQP-VK.image.host_image_copy.optimal.image_to_image_memcpy.depth_attachment_stencil_read_only_optimal.depth_attachment_stencil_read_only_optimal.32x32x1_1.0.r16_unorm	
+a750		flake	dEQP-VK.memory.allocation.basic.size_8KiB.forward.count_4000	
+a750		flake	dEQP-VK.pipeline.fast_linked_library.stencil.format.d32_sfloat_s8_uint.states.fail_decw.pass_inv.dfail_decc.comp_always	
+a750		flake	dEQP-VK.pipeline.monolithic.sampler.view_type.1d_array.format.r16g16b16a16_sfloat.mag_reduce.comp_one_r_r_r.max	
+a750		flake	dEQP-VK.pipeline.monolithic.stencil.format.d32_sfloat_s8_uint.states.fail_decc.pass_decc.dfail_repl.comp_always.any	
+a750		flake	dEQP-VK.pipeline.monolithic.stencil.format.s8_uint.states.fail_keep.pass_decw.dfail_zero.comp_always.any	
+a750		flake	dEQP-VK.pipeline.pipeline_library.blend.dual_source.format.r8g8b8a8_snorm.output_variable.states.color_ca_1ms1a_sub_alpha_1msa_1mdc_sub-color_1mda_sas_add_alpha_o_ca_add-color_sa_1mdc_sub_alpha_o_1mca_rsub-color_s1c_1msa_rsub_alpha_1msa_1mca_add	
+a750		flake	dEQP-VK.pipeline.pipeline_library.color_write_enable.no_channels.two_draws_static.disable_second	
+a750		flake	dEQP-VK.pipeline.pipeline_library.stencil.format.d24_unorm_s8_uint.states.fail_decw.pass_incc.dfail_wrap.comp_not_equal	
+a750		flake	dEQP-VK.pipeline.pipeline_library.stencil.nocolor.format.d24_unorm_s8_uint.states.fail_wrap.pass_decw.dfail_inv.comp_greater_or_equal	
+a750		flake	dEQP-VK.query_pool.statistics_query.reset_after_copy.input_assembly_primitives.secondary_inherited.64bits_cmdcopyquerypoolresults_triangle_strip_with_adjacency	
+a750		flake	dEQP-VK.query_pool.statistics_query.reset_before_copy.geometry_shader_invocations.primary.64bits_cmdcopyquerypoolresults_point_list_clear_color	
+a750		flake	dEQP-VK.spirv_assembly.instruction.compute.opinboundsaccesschain.uint.array_2	
+a750		flake	dEQP-VK.synchronization.cross_instance.suballocated.write_ssbo_tess_control_read_ubo_compute.buffer_16384_binary_semaphore_fd	
+a750		flake	dEQP-VK.synchronization.internally_synchronized_objects.pipeline_cache_compute	
+a750		flake	dEQP-VK.synchronization.op.single_queue.fence.write_image_fragment_read_blit_image.image_128x128_r16g16b16a16_uint	
+a750		flake	dEQP-VK.synchronization2.cross_instance.dedicated.write_image_tess_control_read_blit_image.image_128x128_r16_uint_binary_semaphore_fd	
+a750		flake	dEQP-VK.synchronization2.op.single_queue.timeline_semaphore.write_image_fragment_read_image_compute.image_128_r32_uint	
+a750		flake	dEQP-VK.texture.shadow.cube_array.nearest_mipmap_nearest.not_equal_d32_sfloat	
+a750		flake	dEQP-VK.transform_feedback.primitives_generated_query.copy.host_reset.32bit.geom.xfb.rast.line_strip_with_adjacency.pgq_0_xfb_1.two_draws.xfbq_first.after	
+a750		flake	dEQP-VK.transform_feedback.primitives_generated_query.copy.host_reset.pgq_32bit_xfb_64bit.geom.xfb.rast.line_list.pgq_0_xfb_default.two_draws.xfbq_first.after_2_queries	
+a750		flake	dEQP-VK.transform_feedback.primitives_generated_query.get.queue_reset.32bit.geom.xfb.rast.triangle_strip.pgq_0_xfb_0.single_draw.xfbq_first.after_2_queries	
+a750	dynamic	flake	dEQP-VK.renderpass2.suballocation.attachment_sparse_filling.input_attachment_1	
+a750	gmem	skip	dEQP-VK.api.*	
+a750	gmem	skip	dEQP-VK.renderpass\..*	
+a750	gmem	skip	dEQP-VK.synchronization\..*	
+a750	gmem	skip	dEQP-VK.wsi.*	

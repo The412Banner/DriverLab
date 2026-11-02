@@ -27,6 +27,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -231,6 +232,13 @@ fun SessionScreen(nav: NavHostController, id: String) {
     Scaffold(
         topBar = {
             AppBar(meta.driverName, subtitle = Fmt.dateTime(meta.startedAt), onBack = { nav.popBackStack() }, actions = {
+                if (meta.pairId.isNotEmpty() && AppGraph.sessions.get(meta.pairId) != null) {
+                    IconButton(onClick = {
+                        val other = AppGraph.sessions.get(meta.pairId)!!
+                        val (a, b) = if (other.startedAt < meta.startedAt) other.id to meta.id else meta.id to other.id
+                        nav.navigate(route("compare", a, b))
+                    }) { Icon(Icons.AutoMirrored.Filled.CompareArrows, "Compare with the other driver") }
+                }
                 IconButton(onClick = { listDialog = true }, enabled = !running) { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, "Make a test list") }
                 IconButton(onClick = { nav.navigate(route("folder", id, ".")) }) { Icon(Icons.Filled.Folder, "Files") }
                 IconButton(onClick = { scope.launch { shareSession(context, meta) } }) { Icon(Icons.Filled.Share, "Share") }
@@ -260,6 +268,14 @@ fun SessionScreen(nav: NavHostController, id: String) {
                         val n = meta.counts[b]
                         if (n > 0) FilterChip(filter == b.name, { filter = if (filter == b.name) null else b.name },
                             label = { Text("${b.label} ${Fmt.count(n.toLong())}") }, leadingIcon = { StatusDot(b) })
+                    }
+                    val pick: (String) -> Unit = { key -> filter = if (filter == key) null else key }
+                    ExtraChip(filter, ExtraFilter.FLAKY, "Sometimes fails", meta.flaky, pick)
+                    ExtraChip(filter, ExtraFilter.GPU_ERRORS, "GPU errors", meta.gpuErrorTests, pick)
+                    val known = results.count { it.mesaNote.isNotEmpty() }
+                    if (known > 0) {
+                        ExtraChip(filter, ExtraFilter.NEW_PROBLEMS, "Not known to Mesa", results.count { keep(it, ExtraFilter.NEW_PROBLEMS) }, pick)
+                        ExtraChip(filter, ExtraFilter.MESA_KNOWN, "Known to Mesa", known, pick)
                     }
                 }
             }
@@ -414,6 +430,11 @@ private fun TestListDialog(nav: NavHostController, meta: SessionMeta, onDismiss:
 }
 
 @Composable
+private fun ExtraChip(filter: String?, key: String, label: String, n: Int, pick: (String) -> Unit) {
+    if (n > 0) FilterChip(filter == key, { pick(key) }, label = { Text("$label ${Fmt.count(n.toLong())}") })
+}
+
+@Composable
 fun SessionHeader(m: SessionMeta, running: Boolean) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -434,6 +455,19 @@ fun SessionHeader(m: SessionMeta, running: Boolean) {
                 Spacer(Modifier.height(8.dp))
                 CountsRow(m.counts)
                 if (m.record) Text("GPU commands recorded", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                if (m.repeat > 1) Text(
+                    "Each test ran ${m.repeat} times · " + if (m.flaky > 0) "${m.flaky} had different results" else "same result every time",
+                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary,
+                )
+                when {
+                    m.gpuCheck == "on" -> Text(
+                        if (m.gpuErrorLines == 0) "GPU error check: no GPU errors" else "GPU errors: ${m.gpuErrorLines} kernel log lines during ${m.gpuErrorTests} tests",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (m.gpuErrorLines == 0) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                    )
+                    m.gpuCheck.isNotEmpty() -> Text("GPU error check did not run: ${m.gpuCheck}", style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 if (m.message.isNotEmpty()) Text(m.message, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error, maxLines = 4)
             }
         }
@@ -474,6 +508,12 @@ fun ResultRow(r: TestResult, onClick: () -> Unit) {
             if (r.message.isNotEmpty() && r.status != TestStatus.PASS) {
                 Text(r.message, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
+            val tags = listOfNotNull(
+                if (r.flaky) "Sometimes fails" else null,
+                if (r.gpuErrors > 0) "GPU errors: ${r.gpuErrors}" else null,
+            )
+            if (tags.isNotEmpty()) Text(tags.joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+            if (r.mesaNote.isNotEmpty()) Text(r.mesaNote, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Spacer(Modifier.width(8.dp))
         Column(horizontalAlignment = Alignment.End) {
@@ -483,13 +523,7 @@ fun ResultRow(r: TestResult, onClick: () -> Unit) {
     }
 }
 
-private suspend fun findResult(id: String, name: String): TestResult? = withContext(Dispatchers.IO) {
-    val f = File(AppGraph.sessions.dir(id), "results.tsv")
-    if (!f.exists()) return@withContext null
-    var found: TestResult? = null
-    f.bufferedReader().useLines { seq -> for (l in seq) { if (l.startsWith(name + "\t")) { found = SessionStore.parseResult(l) } } }
-    found
-}
+private suspend fun findResult(id: String, name: String): TestResult? = AppGraph.sessions.resultFor(id, name)
 
 private fun stdoutSlice(id: String, r: TestResult): String {
     val out = File(AppGraph.sessions.dir(id), "output/batch-%05d.txt".format(r.batch))
@@ -514,8 +548,12 @@ fun TestDetailScreen(nav: NavHostController, id: String, name: String) {
     val result by produceState<TestResult?>(null, id, name) { value = findResult(id, name) }
     var tab by rememberSaveable { mutableStateOf(0) }
     val dir = AppGraph.sessions.dir(id)
-    val testLog = File(dir, "tests/${SessionStore.fileBase(name)}.log")
     val r = result
+    val testLog = File(dir, "tests/${SessionStore.fileBase(name)}${if ((r?.round ?: 1) > 1) "~r${r?.round}" else ""}.log")
+    val runs by produceState<List<TestResult>>(emptyList(), id, name) { value = AppGraph.sessions.runsOf(id, name) }
+    val gpuLines by produceState<List<String>>(emptyList(), id, name) {
+        value = if ((AppGraph.sessions.get(id)?.gpuErrorLines ?: 0) > 0) AppGraph.sessions.gpuErrors(id)[name].orEmpty() else emptyList()
+    }
     val capture = r?.capture?.let { File(dir, it) }?.takeIf { it.exists() }
     Scaffold(topBar = {
         AppBar(name.substringAfterLast('.'), subtitle = name.removePrefix("dEQP-VK."), onBack = { nav.popBackStack() }, actions = {
@@ -541,6 +579,22 @@ fun TestDetailScreen(nav: NavHostController, id: String, name: String) {
                         Text(Fmt.time(r.finishedAt), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     if (r.message.isNotEmpty()) { Spacer(Modifier.height(8.dp)); Text(r.message, style = MaterialTheme.typography.bodyMedium) }
+                    if (runs.size > 1) {
+                        Spacer(Modifier.height(6.dp))
+                        Text("Runs: " + runs.joinToString("  ") { "${it.round}: ${it.status.label}" },
+                            style = MaterialTheme.typography.bodySmall, color = if (r.flaky) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (r.round > 1) Text("The logs below are from run ${r.round}.", style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (r.mesaNote.isNotEmpty()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(r.mesaNote, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
+                    }
+                    if (gpuLines.isNotEmpty()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text("GPU errors in the kernel log while this test ran:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        SelectionContainer { Text(gpuLines.take(8).joinToString("\n") + if (gpuLines.size > 8) "\n… ${gpuLines.size - 8} more" else "", style = MonoSmall) }
+                    }
                     Spacer(Modifier.height(6.dp))
                     SelectionContainer { Text(name, style = MonoSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     val runDriver = AppGraph.sessions.get(id)?.let { AppGraph.drivers.get(it.driverId) }
@@ -656,26 +710,20 @@ private fun CaptureView(nav: NavHostController, id: String, name: String, captur
 fun CompareScreen(nav: NavHostController, a: String, b: String) {
     val ma = AppGraph.sessions.get(a)
     val mb = AppGraph.sessions.get(b)
-    data class Row3(val name: String, val sa: TestStatus?, val sb: TestStatus?)
+    data class Row3(val name: String, val sa: TestStatus?, val sb: TestStatus?, val fa: Boolean = false, val fb: Boolean = false)
     data class Cmp(val both: Int, val same: Int, val diffs: List<Row3>, val captured: List<String>)
     val cmp by produceState<Cmp?>(null, a, b) {
         value = withContext(Dispatchers.IO) {
-            fun load(id: String): HashMap<String, TestStatus> {
-                val m = HashMap<String, TestStatus>()
-                File(AppGraph.sessions.dir(id), "results.tsv").takeIf { it.exists() }?.bufferedReader()?.useLines { seq ->
-                    for (l in seq) SessionStore.parseResult(l)?.let { m[it.name] = it.status }
-                }
-                return m
-            }
-            val ra = load(a)
-            val rb = load(b)
+            // Sessions that ran tests several times compare the combined result and whether it varied.
+            val ra = AppGraph.sessions.statusMap(a)
+            val rb = AppGraph.sessions.statusMap(b)
             var both = 0
             var same = 0
             val diffs = ArrayList<Row3>()
             for ((k, v) in ra) {
                 val w = rb[k] ?: continue
                 both++
-                if (v == w) same++ else diffs += Row3(k, v, w)
+                if (v == w) same++ else diffs += Row3(k, v.first, w.first, v.second, w.second)
             }
             val ca = AppGraph.sessions.captures(a)
             val cb = AppGraph.sessions.captures(b)
@@ -717,8 +765,10 @@ fun CompareScreen(nav: NavHostController, a: String, b: String) {
                         Spacer(Modifier.width(6.dp))
                         Column(horizontalAlignment = Alignment.End) {
                             d.sa?.let { StatusPill(it) }
+                            if (d.fa) Text("sometimes", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                             Spacer(Modifier.height(2.dp))
                             d.sb?.let { StatusPill(it) }
+                            if (d.fb) Text("sometimes", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                         }
                     }
                 }

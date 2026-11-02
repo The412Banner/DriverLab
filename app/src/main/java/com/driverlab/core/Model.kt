@@ -69,6 +69,17 @@ data class TestResult(
     val finishedAt: Long,
     val batch: Int,
     val capture: String?,
+    /** Which time the test ran in a session that runs every test several times (1 = first). */
+    val round: Int = 1,
+    // Filled in when a session is loaded, not stored in results.tsv:
+    /** Ran several times with different outcomes (passed some runs, failed or crashed others). */
+    val flaky: Boolean = false,
+    /** "Passed 3 of 5 runs" etc. for sessions that ran every test several times. */
+    val runsNote: String = "",
+    /** GPU error lines from the kernel log seen while this test ran. */
+    val gpuErrors: Int = 0,
+    /** Mesa's own testing already expects this result (see MesaExpect). */
+    val mesaNote: String = "",
 )
 
 /** What a Vulkan driver reported in dEQP-VK.info.device_properties. */
@@ -128,4 +139,16 @@ data class SessionMeta(
     val env: String,
     val message: String,
     val exports: List<String>,
+    /** Every test ran this many times (rounds). */
+    val repeat: Int = 1,
+    /** Tests with different outcomes across the rounds. */
+    val flaky: Int = 0,
+    /** GPU error check: "" off, "on", or why it could not run. */
+    val gpuCheck: String = "",
+    /** GPU error lines seen in the kernel log during the session. */
+    val gpuErrorLines: Int = 0,
+    /** Tests that had GPU error lines while they ran. */
+    val gpuErrorTests: Int = 0,
+    /** The other session of a two-driver run, for Compare. */
+    val pairId: String = "",
 )

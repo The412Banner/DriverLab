@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Folder
@@ -119,6 +120,20 @@ fun RunScreen(nav: NavHostController) {
                         Spacer(Modifier.height(4.dp))
                         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
                     }
+                    val parts = listOfNotNull(
+                        if (l.steps > 1) "Driver ${l.step} of ${l.steps}" else null,
+                        if (l.rounds > 1) "Run ${l.round} of ${l.rounds}" else null,
+                        when {
+                            l.gpuCheck == "on" -> if (l.gpuErrorLines == 0) "No GPU errors" else "GPU errors: ${l.gpuErrorLines}"
+                            l.gpuCheck.isNotEmpty() -> "GPU error check off: ${l.gpuCheck}"
+                            else -> null
+                        },
+                    )
+                    if (parts.isNotEmpty()) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(parts.joinToString(" · "), style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center,
+                            color = if (l.gpuErrorLines > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary)
+                    }
                 }
             }
             item { StatGrid(l) }
@@ -165,6 +180,11 @@ fun RunScreen(nav: NavHostController) {
             }
             item {
               Column {
+                AnimatedVisibility(!l.active && l.pairIds.size == 2, enter = fadeIn() + scaleIn(initialScale = 0.95f)) {
+                    Button(onClick = { nav.navigate(route("compare", l.pairIds[0], l.pairIds[1])) }, modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp), shape = RoundedCornerShape(14.dp)) {
+                        Icon(Icons.AutoMirrored.Filled.CompareArrows, null); Spacer(Modifier.width(6.dp)); Text("Compare the two drivers")
+                    }
+                }
                 AnimatedVisibility(!l.active, enter = fadeIn() + scaleIn(initialScale = 0.95f)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Button(onClick = { if (l.sessionId.isNotEmpty()) nav.navigate(route("session", l.sessionId)) }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp)) {

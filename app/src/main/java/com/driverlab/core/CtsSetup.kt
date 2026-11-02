@@ -110,5 +110,7 @@ object Paths {
     fun deqp(c: Context) = File(nativeDir(c), "libdeqp_vk.so")
     fun shim(c: Context) = File(nativeDir(c), "libdlvkshim.so")
     fun recorder(c: Context) = File(nativeDir(c), "libdlrec.so")
+    fun bench(c: Context) = File(nativeDir(c), "libdlbench.so")
+    fun speed(c: Context) = File(c.filesDir, "speed")
     fun work(c: Context) = File(c.cacheDir, "work").apply { mkdirs() }
 }

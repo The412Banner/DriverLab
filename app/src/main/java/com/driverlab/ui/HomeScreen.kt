@@ -31,17 +31,22 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.DeveloperBoard
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -68,6 +73,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import com.driverlab.AppGraph
+import com.driverlab.core.AppSettings
 import com.driverlab.core.DriverInfo
 import com.driverlab.core.Fmt
 import com.driverlab.core.RunManager
@@ -88,6 +94,7 @@ fun rememberRunStarter(nav: NavHostController): RunStarter {
     fun launchNow() {
         val total = AppGraph.selection.count(selection)
         val driver = AppGraph.drivers.get(settings.driverId) ?: AppGraph.drivers.get(DriverInfo.SYSTEM_ID)!!
+        val second = settings.secondDriverId.takeIf { it.isNotEmpty() && it != driver.id && AppGraph.drivers.get(it) != null }
         val req = RunManager.Request(
             driverId = driver.id,
             label = label ?: "Custom selection",
@@ -101,6 +108,9 @@ fun rememberRunStarter(nav: NavHostController): RunStarter {
             perTestLogLimit = settings.perTestLogLimit,
             export = settings.exportToDownloads,
             rawLog = settings.rawKgslLog,
+            repeat = if (settings.record) 1 else settings.repeat,
+            gpuCheck = settings.gpuCheck,
+            thenDriverId = second,
         )
         if (AppGraph.runs.start(req)) nav.navigate("run")
     }
@@ -115,7 +125,7 @@ fun rememberRunStarter(nav: NavHostController): RunStarter {
         }
     }
     val start = {
-        val total = AppGraph.selection.count(selection)
+        val total = AppGraph.selection.count(selection) * (if (settings.record) 1 else settings.repeat.coerceAtLeast(1))
         confirm = when {
             total <= 0 -> null
             settings.record && total > 300 ->
@@ -150,6 +160,7 @@ fun HomeScreen(nav: NavHostController) {
     val scope = rememberCoroutineScope()
     val starter = rememberRunStarter(nav)
     var pickDriver by remember { mutableStateOf(false) }
+    var pickSecond by remember { mutableStateOf(false) }
     var count by remember { mutableLongStateOf(0L) }
     LaunchedEffect(selection) { count = AppGraph.selection.count(selection) }
 
@@ -242,16 +253,43 @@ fun HomeScreen(nav: NavHostController) {
             }
         }
         item {
+            RunOptionsCard(
+                settings, drivers.firstOrNull { it.id == settings.secondDriverId && it.id != driver?.id },
+                onPickSecond = { pickSecond = true },
+            )
+        }
+        item {
             Button(
                 onClick = starter.start,
-                enabled = count > 0 && live?.active != true,
+                enabled = count > 0 && live?.active != true && !AppGraph.speed.isActive,
                 modifier = Modifier.fillMaxWidth().height(56.dp),
                 shape = RoundedCornerShape(16.dp),
             ) {
                 Icon(Icons.Filled.PlayArrow, null)
                 Spacer(Modifier.width(8.dp))
-                Text(if (live?.active == true) "A run is in progress" else "Run ${if (count > 0) Fmt.count(count) + " " else ""}tests on ${driver?.name ?: "driver"}",
+                val times = if (!settings.record && settings.repeat > 1) " ×${settings.repeat}" else ""
+                Text(if (live?.active == true) "A run is in progress" else "Run ${if (count > 0) Fmt.count(count) + " " else ""}tests$times on ${driver?.name ?: "driver"}",
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        item {
+            Card(
+                Modifier.fillMaxWidth().clickable { nav.navigate("speed") },
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+            ) {
+                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconBadge(Icons.Filled.Speed, MaterialTheme.colorScheme.primary, size = 44.dp)
+                    Spacer(Modifier.width(14.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Speed test", style = MaterialTheme.typography.titleMedium)
+                        val sp by AppGraph.speed.live.collectAsStateWithLifecycle()
+                        Text(
+                            if (sp?.active == true) "Running on ${sp?.driverName}" else "How fast one or two drivers draw and compute, with a live picture",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Icon(Icons.Filled.ChevronRight, null)
+                }
             }
         }
         if (sessions.isNotEmpty()) {
@@ -262,6 +300,39 @@ fun HomeScreen(nav: NavHostController) {
         }
     }
     starter.dialog()
+    if (pickSecond) {
+        AlertDialog(
+            onDismissRequest = { pickSecond = false },
+            title = { Text("Then also run on") },
+            text = {
+                Column {
+                    Text("After the run, the same tests run on this driver too, and Compare shows what differs.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    val choices = listOf<DriverInfo?>(null) + drivers.filter { it.id != driver?.id }
+                    for (d in choices) {
+                        val selected = (d?.id ?: "") == settings.secondDriverId || (d == null && drivers.none { it.id == settings.secondDriverId && it.id != driver?.id })
+                        Row(
+                            Modifier.fillMaxWidth().selectable(selected) {
+                                AppGraph.settings.update { it.copy(secondDriverId = d?.id ?: "") }
+                                pickSecond = false
+                            }.padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = selected, onClick = null)
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                Text(d?.name ?: "No second driver", style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                if (d != null && d.env.isNotBlank()) Text(d.env.lines().filter { it.isNotBlank() }.joinToString("  "),
+                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary, maxLines = 2)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { pickSecond = false }) { Text("Close") } },
+        )
+    }
     if (pickDriver) {
         AlertDialog(
             onDismissRequest = { pickDriver = false },
@@ -352,6 +423,63 @@ fun SessionCard(s: SessionMeta, modifier: Modifier = Modifier, onClick: () -> Un
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CountsRow(s.counts, Modifier.weight(1f))
                 if (s.record) Icon(Icons.Filled.FiberManualRecord, "Recorded", Modifier.size(14.dp), tint = MaterialTheme.colorScheme.error)
+            }
+        }
+    }
+}
+
+/** Repeat count, the GPU error check and an optional second driver. */
+@Composable
+private fun RunOptionsCard(settings: AppSettings, second: DriverInfo?, onPickSecond: () -> Unit) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
+        Column(Modifier.padding(16.dp).animateContentSize()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconBadge(Icons.Filled.Repeat, MaterialTheme.colorScheme.secondary, size = 44.dp)
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Run each test", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        when {
+                            settings.record -> "Once while recording"
+                            settings.repeat > 1 -> "${settings.repeat} times · tests that only sometimes fail are flagged"
+                            else -> "Once"
+                        },
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (n in listOf(1, 3, 5, 10)) {
+                    FilterChip(
+                        selected = (if (settings.record) 1 else settings.repeat) == n,
+                        enabled = !settings.record,
+                        onClick = { AppGraph.settings.update { it.copy(repeat = n) } },
+                        label = { Text("${n}×") },
+                    )
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconBadge(Icons.Filled.Warning, MaterialTheme.colorScheme.error, size = 44.dp)
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Check for GPU errors", style = MaterialTheme.typography.titleMedium)
+                    Text("Reads the kernel log for GPU faults and hangs during each test. Needs root.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(checked = settings.gpuCheck, onCheckedChange = { v -> AppGraph.settings.update { it.copy(gpuCheck = v) } })
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(Modifier.fillMaxWidth().clickable(onClick = onPickSecond), verticalAlignment = Alignment.CenterVertically) {
+                IconBadge(Icons.AutoMirrored.Filled.CompareArrows, MaterialTheme.colorScheme.tertiary, size = 44.dp)
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Then also run on", style = MaterialTheme.typography.titleMedium)
+                    Text(second?.name ?: "No second driver · tap to pick one and compare",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+                Icon(Icons.Filled.ChevronRight, null)
             }
         }
     }

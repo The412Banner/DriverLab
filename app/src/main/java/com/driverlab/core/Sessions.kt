@@ -55,34 +55,129 @@ class SessionStore(private val context: Context) {
 
     data class Loaded(val results: List<TestResult>, val totalLines: Int, val truncated: Boolean)
 
-    /** Loads results.tsv. Keeps every non-pass result and up to [passCap] passes. */
+    /**
+     * Loads results.tsv. Keeps every non-pass result and up to [passCap] passes. A session that ran
+     * every test several times gives one result per test (see [combineRuns]); GPU errors and Mesa's
+     * known results are added.
+     */
     suspend fun loadResults(id: String, passCap: Int = 50_000): Loaded = withContext(Dispatchers.IO) {
+        val meta = get(id)
         val f = File(dir(id), "results.tsv")
-        val out = ArrayList<TestResult>()
         var lines = 0
-        var passes = 0
+        val raw = ArrayList<TestResult>()
         var truncated = false
-        if (f.exists()) f.bufferedReader().useLines { seq ->
-            for (l in seq) {
-                val r = parseResult(l) ?: continue
-                lines++
+        if ((meta?.repeat ?: 1) > 1) {
+            val byName = LinkedHashMap<String, ArrayList<TestResult>>()
+            if (f.exists()) f.bufferedReader().useLines { seq ->
+                for (l in seq) {
+                    val r = parseResult(l) ?: continue
+                    lines++
+                    byName.getOrPut(r.name) { ArrayList(4) } += r
+                }
+            }
+            var passes = 0
+            for (runs in byName.values) {
+                val r = combineRuns(runs)
                 if (r.status == TestStatus.PASS) {
                     if (passes >= passCap) { truncated = true; continue }
                     passes++
                 }
-                out += r
+                raw += r
+            }
+        } else {
+            var passes = 0
+            if (f.exists()) f.bufferedReader().useLines { seq ->
+                for (l in seq) {
+                    val r = parseResult(l) ?: continue
+                    lines++
+                    if (r.status == TestStatus.PASS) {
+                        if (passes >= passCap) { truncated = true; continue }
+                        passes++
+                    }
+                    raw += r
+                }
             }
         }
-        Loaded(out, lines, truncated)
+        Loaded(annotate(id, meta, raw), lines, truncated)
     }
 
-    /** Feeds the name of every test in results.tsv whose result falls in [buckets], in run order. */
+    /** The result of one test as the session screen shows it (several runs combined). */
+    suspend fun resultFor(id: String, name: String): TestResult? = withContext(Dispatchers.IO) {
+        val runs = runsOf(id, name)
+        if (runs.isEmpty()) return@withContext null
+        annotate(id, get(id), listOf(if (runs.size > 1) combineRuns(runs) else runs[0])).firstOrNull()
+    }
+
+    /** Every run of one test, in order. */
+    suspend fun runsOf(id: String, name: String): List<TestResult> = withContext(Dispatchers.IO) {
+        val f = File(dir(id), "results.tsv")
+        val out = ArrayList<TestResult>()
+        if (f.exists()) f.bufferedReader().useLines { seq ->
+            for (l in seq) if (l.startsWith(name + "\t")) parseResult(l)?.takeIf { it.name == name }?.let { out += it }
+        }
+        out
+    }
+
+    /** Test name -> combined status and whether its runs differed, for Compare. */
+    suspend fun statusMap(id: String): HashMap<String, Pair<TestStatus, Boolean>> = withContext(Dispatchers.IO) {
+        val m = HashMap<String, Pair<TestStatus, Boolean>>()
+        val f = File(dir(id), "results.tsv")
+        if ((get(id)?.repeat ?: 1) > 1) {
+            val byName = HashMap<String, ArrayList<TestResult>>()
+            if (f.exists()) f.bufferedReader().useLines { seq ->
+                for (l in seq) parseResult(l)?.let { byName.getOrPut(it.name) { ArrayList(4) } += it }
+            }
+            for ((k, runs) in byName) combineRuns(runs).let { m[k] = it.status to it.flaky }
+        } else if (f.exists()) {
+            f.bufferedReader().useLines { seq -> for (l in seq) parseResult(l)?.let { m[it.name] = it.status to false } }
+        }
+        m
+    }
+
+    /** Per-test counts and the number of tests whose runs differed, for a session's summary. */
+    suspend fun combinedCounts(id: String): Pair<Counts, Int> = withContext(Dispatchers.IO) {
+        var c = Counts()
+        var flaky = 0
+        for ((_, v) in statusMap(id)) {
+            c = c.plus(v.first.bucket)
+            if (v.second) flaky++
+        }
+        c to flaky
+    }
+
+    /** GPU error lines of a session: test name -> the lines seen while it ran. */
+    suspend fun gpuErrors(id: String): Map<String, List<String>> = withContext(Dispatchers.IO) {
+        val m = HashMap<String, MutableList<String>>()
+        File(dir(id), GPU_ERRORS).takeIf { it.exists() }?.bufferedReader()?.useLines { seq ->
+            for (l in seq) {
+                if (l.startsWith("#")) continue
+                val f = l.split('\t', limit = 3)
+                if (f.size < 3) continue
+                for (n in f[1].split('|')) if (n.isNotEmpty()) m.getOrPut(n) { ArrayList() } += f[2]
+            }
+        }
+        m
+    }
+
+    private suspend fun annotate(id: String, meta: SessionMeta?, list: List<TestResult>): List<TestResult> {
+        val errors = if ((meta?.gpuErrorLines ?: 0) > 0) gpuErrors(id) else emptyMap()
+        val mesa = meta?.let { MesaExpect.forSession(context, it) }
+        if (errors.isEmpty() && mesa == null) return list
+        return list.map { r ->
+            val e = errors[r.name]?.size ?: 0
+            val note = mesa?.note(r.name, r.status).orEmpty()
+            if (e == 0 && note.isEmpty()) r else r.copy(gpuErrors = e, mesaNote = note)
+        }
+    }
+
+    /** Feeds the name of every test in results.tsv whose result falls in [buckets], in run order, once each. */
     suspend fun forEachNameWith(id: String, buckets: Set<Bucket>, sink: suspend (String) -> Unit) = withContext(Dispatchers.IO) {
         val f = File(dir(id), "results.tsv")
+        val seen = HashSet<String>()
         if (f.exists()) f.bufferedReader().useLines { seq ->
             for (l in seq) {
                 val r = parseResult(l) ?: continue
-                if (r.status.bucket in buckets) sink(r.name)
+                if (r.status.bucket in buckets && seen.add(r.name)) sink(r.name)
             }
         }
     }
@@ -224,6 +319,9 @@ class SessionStore(private val context: Context) {
     fun sizeOf(f: File): Long = if (f.isDirectory) f.walkTopDown().filter { it.isFile }.sumOf { it.length() } else f.length()
 
     companion object {
+        /** time_ms, tests running then ("|"-separated), kernel log line. */
+        const val GPU_ERRORS = "gpu-errors.tsv"
+
         /** File name base for a test: GLES tests drop the "fd-gles." prefix (test-draw.log). */
         fun fileBase(test: String): String = safeName(test.removePrefix("$GLES_ROOT."))
 
@@ -234,7 +332,7 @@ class SessionStore(private val context: Context) {
 
         fun resultLine(r: TestResult): String = listOf(
             r.name, r.status.key, r.message.replace('\t', ' ').replace('\n', ' '),
-            r.durationMs.toString(), r.finishedAt.toString(), r.batch.toString(), r.capture ?: "",
+            r.durationMs.toString(), r.finishedAt.toString(), r.batch.toString(), r.capture ?: "", r.round.toString(),
         ).joinToString("\t")
 
         fun parseResult(l: String): TestResult? {
@@ -249,7 +347,44 @@ class SessionStore(private val context: Context) {
                 finishedAt = f[4].toLongOrNull() ?: 0,
                 batch = f[5].toIntOrNull() ?: 0,
                 capture = f.getOrNull(6)?.takeIf { it.isNotEmpty() },
+                round = f.getOrNull(7)?.toIntOrNull() ?: 1,
             )
+        }
+
+        /**
+         * One result for a test that ran several times. Runs that were stopped or skipped are left
+         * out when there are others. The shown status is the worst outcome (crash, then fail, then
+         * warning); "flaky" means the outcomes differed, e.g. passed 3 of 5 runs.
+         */
+        fun combineRuns(runs: List<TestResult>): TestResult {
+            if (runs.size == 1) return runs[0]
+            val real = runs.filter { it.status != TestStatus.STOPPED && it.status != TestStatus.NOT_RUN }.ifEmpty { runs }
+            fun rank(b: Bucket) = when (b) {
+                Bucket.CRASHED -> 0
+                Bucket.FAILED -> 1
+                Bucket.WARNING -> 2
+                Bucket.PASSED -> 3
+                Bucket.SKIPPED -> 4
+            }
+            val worst = real.minBy { rank(it.status.bucket) }
+            val outcomes = real.map { it.status.bucket }.filter { it != Bucket.SKIPPED }.toSet()
+            val flaky = outcomes.size > 1
+            val n = real.size
+            val passed = real.count { it.status.bucket == Bucket.PASSED }
+            val failed = real.count { it.status.bucket == Bucket.FAILED }
+            val crashed = real.count { it.status.bucket == Bucket.CRASHED }
+            val note = when {
+                passed == n -> "Passed all $n runs"
+                outcomes.isEmpty() -> "Not supported in all $n runs"
+                !flaky -> "${worst.status.label} in all $n runs"
+                else -> buildList {
+                    add("Passed $passed of $n runs")
+                    if (failed > 0) add("failed $failed")
+                    if (crashed > 0) add("crashed $crashed")
+                }.joinToString(", ")
+            }
+            val msg = if (worst.status.bucket == Bucket.PASSED) note else note + (if (worst.message.isNotEmpty()) " — " + worst.message else "")
+            return worst.copy(message = msg, flaky = flaky, runsNote = note)
         }
 
         fun toJson(m: SessionMeta): JSONObject = JSONObject().apply {
@@ -263,6 +398,8 @@ class SessionStore(private val context: Context) {
                 put("warning", m.counts.warning); put("skipped", m.counts.skipped)
             })
             put("exports", JSONArray(m.exports))
+            put("repeat", m.repeat); put("flaky", m.flaky); put("gpuCheck", m.gpuCheck)
+            put("gpuErrorLines", m.gpuErrorLines); put("gpuErrorTests", m.gpuErrorTests); put("pairId", m.pairId)
         }
 
         fun fromJson(o: JSONObject): SessionMeta {
@@ -286,6 +423,12 @@ class SessionStore(private val context: Context) {
                 env = o.optString("env"),
                 message = o.optString("message"),
                 exports = (0 until ex.length()).map { ex.getString(it) },
+                repeat = o.optInt("repeat", 1).coerceAtLeast(1),
+                flaky = o.optInt("flaky", 0),
+                gpuCheck = o.optString("gpuCheck"),
+                gpuErrorLines = o.optInt("gpuErrorLines", 0),
+                gpuErrorTests = o.optInt("gpuErrorTests", 0),
+                pairId = o.optString("pairId"),
             )
         }
     }

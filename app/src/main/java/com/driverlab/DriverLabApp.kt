@@ -12,6 +12,7 @@ import com.driverlab.core.RunManager
 import com.driverlab.core.SelectionStore
 import com.driverlab.core.SessionStore
 import com.driverlab.core.SettingsStore
+import com.driverlab.core.SpeedManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -60,6 +61,8 @@ object AppGraph {
         private set
     lateinit var features: FeatureChecker
         private set
+    lateinit var speed: SpeedManager
+        private set
 
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -74,11 +77,14 @@ object AppGraph {
         runs = RunManager(a, drivers, selection, sessions, setup)
         flagCheck = FlagCheck(a, drivers, settings, scope)
         features = FeatureChecker(a, drivers, catalog, scope)
+        speed = SpeedManager(a, drivers, sessions)
+        runs.otherBusy = { speed.isActive }
         scope.launch(Dispatchers.IO) {
             catalog.loadIndex()
             drivers.reload()
             features.load()
             sessions.refresh()
+            speed.refresh()
             setup.ensure()
             // Learn what the system driver reports the first time the app runs.
             val sys = drivers.get("system")?.probe

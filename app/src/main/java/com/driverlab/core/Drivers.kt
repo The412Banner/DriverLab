@@ -62,6 +62,36 @@ class DriverRepository(private val context: Context) {
         get(id)?.let { save(it.copy(env = env)) }
     }
 
+    /**
+     * A second entry for the same driver files with its own name and settings, e.g. to compare
+     * TU_DEBUG=sysmem with TU_DEBUG=gmem. The files are hard links (no extra space) where possible.
+     */
+    suspend fun copy(id: String, name: String, env: String): Result<DriverInfo> = withContext(Dispatchers.IO) {
+        runCatching {
+            val src = get(id) ?: error("The driver is no longer installed.")
+            require(!src.isSystem) { "The system driver can't be copied; give it settings instead." }
+            val newId = "d" + System.currentTimeMillis()
+            val from = File(root, src.id)
+            val to = File(root, newId).apply { mkdirs() }
+            try {
+                from.walkTopDown().filter { it.isFile && it.name != DRIVER_JSON }.forEach { f ->
+                    val dst = File(to, f.relativeTo(from).path).apply { parentFile?.mkdirs() }
+                    try {
+                        android.system.Os.link(f.absolutePath, dst.absolutePath)
+                    } catch (e: Exception) {
+                        f.copyTo(dst, overwrite = true)
+                    }
+                }
+                val d = src.copy(id = newId, name = name.trim().ifEmpty { src.name + " (copy)" }, env = env, importedAt = System.currentTimeMillis())
+                save(d)
+                d
+            } catch (e: Exception) {
+                to.deleteRecursively()
+                throw e
+            }
+        }
+    }
+
     fun delete(id: String) {
         if (id == DriverInfo.SYSTEM_ID) return
         File(root, id).deleteRecursively()

@@ -15,6 +15,7 @@ import com.driverlab.MainActivity
 import com.driverlab.R
 import com.driverlab.core.Fmt
 import com.driverlab.core.RunManager
+import com.driverlab.core.SpeedManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -35,9 +36,13 @@ class RunService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
             AppGraph.runs.stop()
+            AppGraph.speed.stop()
             return START_NOT_STICKY
         }
-        ServiceCompat.startForeground(this, NOTIF_ID, build(AppGraph.runs.live.value, true), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        val speed = intent?.action == ACTION_SPEED
+        fun current(ongoing: Boolean) = if (speed) buildSpeed(AppGraph.speed.live.value, ongoing) else build(AppGraph.runs.live.value, ongoing)
+        // Every startForegroundService() needs startForeground(), even when a run is already going.
+        ServiceCompat.startForeground(this, NOTIF_ID, current(true), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         if (job?.isActive == true) return START_NOT_STICKY
         wake = getSystemService(PowerManager::class.java)
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "DriverLab:run").apply { setReferenceCounted(false); acquire(12 * 60 * 60 * 1000L) }
@@ -45,17 +50,16 @@ class RunService : Service() {
         job = scope.launch {
             val updater = launch {
                 while (isActive) {
-                    nm.notify(NOTIF_ID, build(AppGraph.runs.live.value, true))
+                    nm.notify(NOTIF_ID, current(true))
                     delay(1000)
                 }
             }
             try {
-                AppGraph.runs.runPending(this)
+                if (speed) AppGraph.speed.runPending() else AppGraph.runs.runPending(this)
             } finally {
                 updater.cancel()
-                val live = AppGraph.runs.live.value
                 ServiceCompat.stopForeground(this@RunService, ServiceCompat.STOP_FOREGROUND_REMOVE)
-                nm.notify(DONE_ID, build(live, false))
+                nm.notify(DONE_ID, current(false))
                 wake?.let { if (it.isHeld) it.release() }
                 stopSelf()
             }
@@ -97,6 +101,37 @@ class RunService : Service() {
         return b.build()
     }
 
+    private fun buildSpeed(live: SpeedManager.Live?, ongoing: Boolean): Notification {
+        val open = PendingIntent.getActivity(
+            this, 0, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val b = NotificationCompat.Builder(this, if (ongoing) AppGraph.CHANNEL_RUNS else AppGraph.CHANNEL_DONE)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentIntent(open)
+            .setOnlyAlertOnce(true)
+        if (live == null) return b.setContentTitle("DriverLab").setContentText("Starting the speed test").setOngoing(ongoing).build()
+        if (ongoing) {
+            val stop = PendingIntent.getService(
+                this, 1, Intent(this, RunService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE,
+            )
+            b.setContentTitle("Speed test: ${live.driverName}")
+                .setContentText(live.message ?: "Round ${live.round} of ${live.rounds}" + (live.scene?.let { " · $it" } ?: ""))
+                .setProgress(1000, (live.fraction * 1000).toInt(), false)
+                .setOngoing(true)
+                .addAction(0, "Stop", stop)
+        } else {
+            b.setContentTitle(
+                when (live.phase) {
+                    SpeedManager.Phase.DONE -> "Speed test finished"
+                    SpeedManager.Phase.STOPPED -> "Speed test stopped"
+                    else -> "Speed test could not finish"
+                },
+            ).setContentText(live.message.orEmpty()).setAutoCancel(true)
+        }
+        return b.build()
+    }
+
     override fun onDestroy() {
         scope.cancel()
         wake?.let { if (it.isHeld) it.release() }
@@ -105,6 +140,7 @@ class RunService : Service() {
 
     companion object {
         const val ACTION_STOP = "com.driverlab.STOP"
+        const val ACTION_SPEED = "com.driverlab.SPEED"
         const val NOTIF_ID = 1
         const val DONE_ID = 2
     }
