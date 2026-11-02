@@ -533,7 +533,7 @@ class SpeedManager(private val context: Context, private val drivers: DriverRepo
                 sb.append("${names[i]}:         ${d.name}${if (d.version.isNotEmpty()) " — " + d.version else ""}${if (d.gpu.isNotEmpty()) " — " + d.gpu else ""}\n")
                 if (d.env.isNotBlank()) sb.append("           settings: ${d.env.lines().filter { it.isNotBlank() }.joinToString("  ")}\n")
             }
-            sb.append("Settings:  ${r.request.rounds} rounds, ${r.request.seconds} s per scene, ${r.request.pauseSec} s pause between runs")
+            sb.append("Settings:  ${Fmt.plural(r.request.rounds, "round")}, ${r.request.seconds} s per scene, ${r.request.pauseSec} s pause between runs")
             if (r.drivers.size > 1) sb.append(", order alternates (A then B, then B then A)")
             sb.append("\n")
             val t = r.temps.map { it.second }.filter { !it.isNaN() }

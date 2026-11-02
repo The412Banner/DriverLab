@@ -404,7 +404,7 @@ private fun SetupBlock(
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 FilterChip(selected = true, onClick = onScenes, label = { Text("${sc.size} of ${SpeedScenes.all.size} scenes") })
                 FilterChip(selected = false, onClick = { AppGraph.settings.update { it.copy(speedRounds = cycle(listOf(1, 3, 5), it.speedRounds)) } },
-                    label = { Text(if (s.settings.speedRounds == 1) "1 round" else "${s.settings.speedRounds} rounds") })
+                    label = { Text(Fmt.plural(s.settings.speedRounds, "round")) })
                 FilterChip(selected = false, onClick = { AppGraph.settings.update { it.copy(speedSeconds = cycle(listOf(3, 5, 10), it.speedSeconds)) } },
                     label = { Text("${s.settings.speedSeconds} s each") })
                 FilterChip(selected = false, onClick = { AppGraph.settings.update { it.copy(speedPause = cycle(listOf(0, 10, 30), it.speedPause)) } },
@@ -776,7 +776,7 @@ private fun RecentBlock(nav: NavHostController, sessions: List<SessionMeta>, spe
             tag.first, tag.second, if (problems > 0) sc.failed else sc.passed) { nav.navigate(route("session", m.id)) }
     } + speed.take(3).map { r ->
         val bad = r.pictures.count { it.share >= 0 && !it.matches }
-        Item(r.startedAt, "Speed test · " + r.drivers.joinToString(" vs ") { it.name }, "${Fmt.time(r.startedAt)} · ${r.request.scenes.size} scenes · ${r.request.rounds} rounds",
+        Item(r.startedAt, "Speed test · " + r.drivers.joinToString(" vs ") { it.name }, "${Fmt.time(r.startedAt)} · ${Fmt.plural(r.request.scenes.size, "scene")} · ${Fmt.plural(r.request.rounds, "round")}",
             if (r.pictures.isEmpty()) r.state else if (bad == 0) "pictures match" else "$bad pictures differ", if (bad == 0) sc.passed else sc.failed, primary) {
             nav.navigate(route("speedresult", r.id))
         }

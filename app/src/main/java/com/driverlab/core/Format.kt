@@ -27,6 +27,9 @@ object Fmt {
 
     fun count(n: Long): String = String.format(Locale.US, "%,d", n)
 
+    /** "1 round", "3 rounds". */
+    fun plural(n: Int, one: String, many: String = one + "s"): String = "$n " + if (n == 1) one else many
+
     fun dateTime(ms: Long): String = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date(ms))
     fun time(ms: Long): String = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date(ms))
     fun stamp(ms: Long): String = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(Date(ms))

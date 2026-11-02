@@ -182,7 +182,7 @@ fun SpeedScreen(nav: NavHostController) {
                     ) {
                         Column(Modifier.padding(14.dp)) {
                             Text(r.drivers.joinToString(" vs ") { it.name }, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            Text("${Fmt.dateTime(r.startedAt)} · ${r.request.scenes.size} scenes · ${r.request.rounds} rounds · ${r.state}",
+                            Text("${Fmt.dateTime(r.startedAt)} · ${Fmt.plural(r.request.scenes.size, "scene")} · ${Fmt.plural(r.request.rounds, "round")} · ${r.state}",
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
@@ -426,7 +426,7 @@ fun SpeedResultScreen(nav: NavHostController, id: String) {
                             if (d.env.isNotBlank()) Text(d.env.lines().filter { it.isNotBlank() }.joinToString("  "), style = MonoSmall, color = MaterialTheme.colorScheme.tertiary)
                             Spacer(Modifier.height(4.dp))
                         }
-                        Text("${r.request.rounds} rounds · ${r.request.seconds} s per scene · ${r.request.pauseSec} s pause · ${r.state}",
+                        Text("${Fmt.plural(r.request.rounds, "round")} · ${r.request.seconds} s per scene · ${r.request.pauseSec} s pause · ${r.state}",
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         val t = r.temps.map { it.second }.filter { !it.isNaN() }
                         if (t.isNotEmpty()) Text(String.format(java.util.Locale.US, "Battery %.1f → %.1f °C (highest %.1f °C)", t.first(), t.last(), t.max()),
