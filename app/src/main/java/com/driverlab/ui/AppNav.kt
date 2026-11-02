@@ -74,25 +74,9 @@ fun DriverLabRoot() {
         return
     }
     val nav = rememberNavController()
-    val entry by nav.currentBackStackEntryAsState()
-    val current = entry?.destination?.route
-    val showBar = tabs.any { it.route == current }
+    // No bottom tabs: Home is a dashboard with Tests, Results, Drivers and Settings in its header.
     Scaffold(
         contentWindowInsets = WindowInsets(0),
-        bottomBar = {
-            AnimatedVisibility(showBar, enter = slideInVertically { it } + fadeIn(), exit = slideOutVertically { it } + fadeOut()) {
-                NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
-                    for (t in tabs) {
-                        NavigationBarItem(
-                            selected = current == t.route,
-                            onClick = { nav.goTab(t.route) },
-                            icon = { Icon(t.icon, t.label) },
-                            label = { Text(t.label) },
-                        )
-                    }
-                }
-            }
-        },
     ) { pad ->
         Box(Modifier.fillMaxSize().padding(pad).consumeWindowInsets(pad)) {
             NavHost(

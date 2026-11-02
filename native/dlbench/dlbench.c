@@ -701,8 +701,8 @@ static int run_loop(const struct loop *L, struct stats *st)
     double start = now();
     if (!L->every_frame && (r = record_frame(L, 0)))
         return fail(L->scene, r, "recording");
-    int timed = 0, frames = 0;
-    double gpu_sum = 0, timed_start = 0, last_preview = 0;
+    int timed = 0, frames = 0, tick_n = 0;
+    double gpu_sum = 0, timed_start = 0, last_preview = 0, tick_sum = 0, last_tick = 0;
     for (;;) {
         double t0 = now();
         if (!timed && t0 - start >= g.warmup && frames > 0) {
@@ -719,6 +719,15 @@ static int run_loop(const struct loop *L, struct stats *st)
         double t1 = now();
         if (timed) {
             g.times[frames] = (t1 - t0) * 1000.0;
+            /* A live frame-time sample about ten times a second, for the app's graph (outside the timed part). */
+            tick_sum += g.times[frames];
+            tick_n++;
+            if (t1 - last_tick >= 0.1) {
+                printf("DLBENCH tick scene=%s ms=%.4f\n", L->scene, tick_sum / tick_n);
+                tick_sum = 0;
+                tick_n = 0;
+                last_tick = t1;
+            }
             if (g.ts_bits) {
                 uint64_t ts[2];
                 r = vkGetQueryPoolResults(g.device, g.queries, 0, 2, sizeof(ts), ts, sizeof(uint64_t),

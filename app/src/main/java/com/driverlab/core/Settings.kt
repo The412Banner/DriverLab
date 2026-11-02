@@ -26,6 +26,13 @@ data class AppSettings(
     val gpuCheck: Boolean = false,
     /** After the run, run the same tests on this driver too ("" = no). */
     val secondDriverId: String = "",
+    /** Home screen: 0 conformance tests, 1 speed test. */
+    val homeMode: Int = 0,
+    val speedRounds: Int = 3,
+    val speedSeconds: Int = 5,
+    val speedPause: Int = 10,
+    /** Speed test scenes, comma-separated ids ("" = all). */
+    val speedScenes: String = "",
 ) {
     val captureCapBytes: Long
         get() = when (captureLevel) {
@@ -50,7 +57,8 @@ class SettingsStore(context: Context) {
 
     private fun load() = AppSettings(
         theme = prefs.getInt("theme", 0),
-        dynamicColor = prefs.getBoolean("dynamicColor", false),
+        // New key with the blue redesign: an older "wallpaper colours" choice would hide the new look.
+        dynamicColor = prefs.getBoolean("dynamicColor2", false),
         timeoutSec = prefs.getInt("timeoutSec", 120),
         captureLevel = prefs.getInt("captureLevel", 1),
         batchSize = prefs.getInt("batchSize", 250),
@@ -64,13 +72,18 @@ class SettingsStore(context: Context) {
         repeat = prefs.getInt("repeat", 1),
         gpuCheck = prefs.getBoolean("gpuCheck", false),
         secondDriverId = prefs.getString("secondDriverId", "") ?: "",
+        homeMode = prefs.getInt("homeMode", 0),
+        speedRounds = prefs.getInt("speedRounds", 3),
+        speedSeconds = prefs.getInt("speedSeconds", 5),
+        speedPause = prefs.getInt("speedPause", 10),
+        speedScenes = prefs.getString("speedScenes", "") ?: "",
     )
 
     fun update(block: (AppSettings) -> AppSettings) {
         val s = block(_state.value)
         prefs.edit()
             .putInt("theme", s.theme)
-            .putBoolean("dynamicColor", s.dynamicColor)
+            .putBoolean("dynamicColor2", s.dynamicColor)
             .putInt("timeoutSec", s.timeoutSec)
             .putInt("captureLevel", s.captureLevel)
             .putInt("batchSize", s.batchSize)
@@ -84,6 +97,11 @@ class SettingsStore(context: Context) {
             .putInt("repeat", s.repeat)
             .putBoolean("gpuCheck", s.gpuCheck)
             .putString("secondDriverId", s.secondDriverId)
+            .putInt("homeMode", s.homeMode)
+            .putInt("speedRounds", s.speedRounds)
+            .putInt("speedSeconds", s.speedSeconds)
+            .putInt("speedPause", s.speedPause)
+            .putString("speedScenes", s.speedScenes)
             .apply()
         _state.value = s
     }

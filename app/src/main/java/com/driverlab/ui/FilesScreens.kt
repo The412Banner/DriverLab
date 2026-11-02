@@ -83,7 +83,7 @@ fun FilesScreen(nav: NavHostController) {
         value = withContext(Dispatchers.IO) { sessions.associate { it.id to AppGraph.sessions.sizeOf(AppGraph.sessions.dir(it.id)) } }
     }
     val groups = sessions.groupBy { it.driverName }
-    Scaffold(topBar = { AppBar("Files", subtitle = "${sessions.size} sessions · ${Fmt.size(sizes.values.sum())} · copies in Download/DriverLab") }) { pad ->
+    Scaffold(topBar = { AppBar("Files", subtitle = "${sessions.size} sessions · ${Fmt.size(sizes.values.sum())} · copies in Download/DriverLab", onBack = { nav.popBackStack() }) }) { pad ->
         if (sessions.isEmpty()) {
             EmptyState(Icons.Filled.Folder, "Nothing saved yet", "Each test run saves its logs, results, captures and zips here, grouped by driver.", Modifier.padding(pad))
             return@Scaffold
@@ -105,7 +105,7 @@ fun FilesScreen(nav: NavHostController) {
                     var menu by remember { mutableStateOf(false) }
                     Card(
                         Modifier.fillMaxWidth().animateItem().clickable { nav.navigate(route("folder", s.id, ".")) },
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh), border = cardLine(),
                     ) {
                         Row(Modifier.padding(start = 14.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.FolderOpen, null, tint = MaterialTheme.colorScheme.tertiary)

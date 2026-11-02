@@ -171,6 +171,11 @@ class SpeedManager(private val context: Context, private val drivers: DriverRepo
         val scene: String?,
         val samples: List<SpeedSample>,
         val startedAt: Long,
+        /** Driver A and B of this test. */
+        val aId: String = "",
+        val bId: String? = null,
+        /** Recent frame times (ms) of the scene running now, about ten a second. */
+        val ft: List<Double> = emptyList(),
     ) {
         val active: Boolean get() = phase == Phase.STARTING || phase == Phase.RUNNING || phase == Phase.PAUSE
         val fraction: Float get() = if (total <= 0) 0f else (done.toFloat() / total).coerceIn(0f, 1f)
@@ -195,7 +200,8 @@ class SpeedManager(private val context: Context, private val drivers: DriverRepo
         stopFlag.set(false)
         previewFile.delete()
         val n = if (req.driverB != null) 2 else 1
-        _live.value = Live("", Phase.STARTING, "Starting", 0, req.rounds * n, 1, req.rounds, drivers.get(req.driverA)?.name.orEmpty(), null, emptyList(), System.currentTimeMillis())
+        _live.value = Live("", Phase.STARTING, "Starting", 0, req.rounds * n, 1, req.rounds, drivers.get(req.driverA)?.name.orEmpty(), null, emptyList(),
+            System.currentTimeMillis(), req.driverA, req.driverB)
         context.startForegroundService(Intent(context, RunService::class.java).setAction(RunService.ACTION_SPEED))
         return true
     }
@@ -248,10 +254,12 @@ class SpeedManager(private val context: Context, private val drivers: DriverRepo
         @Volatile var scene: String? = null
         val total = req.rounds * list.size
         var pictures: List<SpeedPicture> = emptyList()
+        val ft = ArrayDeque<Double>()
 
         fun publish() {
             val s = synchronized(samples) { samples.toList() }
-            _live.value = Live(id, phase, message, done, total, round, req.rounds, driverName, scene, s, startedAt)
+            val f = synchronized(ft) { ft.toList() }
+            _live.value = Live(id, phase, message, done, total, round, req.rounds, driverName, scene, s, startedAt, req.driverA, req.driverB, f)
         }
 
         fun fail(msg: String) {
@@ -372,7 +380,11 @@ class SpeedManager(private val context: Context, private val drivers: DriverRepo
                             val rec = parse(line) ?: continue
                             when (rec.first) {
                                 "device" -> info[d.id] = Uri.decode(rec.second["name"].orEmpty())
-                                "start" -> { scene = rec.second["scene"]; publish() }
+                                "start" -> { scene = rec.second["scene"]; synchronized(ft) { ft.clear() }; publish() }
+                                "tick" -> {
+                                    rec.second["ms"]?.toDoubleOrNull()?.let { v -> synchronized(ft) { ft.addLast(v); while (ft.size > 60) ft.removeFirst() } }
+                                    if (ft.size % 3 == 0) publish()
+                                }
                                 "result", "skip", "error" -> {
                                     val f = rec.second
                                     val sc = f["scene"] ?: continue

@@ -141,7 +141,7 @@ fun RunScreen(nav: NavHostController) {
                 val elapsed = now - l.startedAt
                 val rate = if (elapsed > 2000 && l.done > 0) l.done * 1000.0 / elapsed else 0.0
                 val eta = if (rate > 0 && l.active) ((l.total - l.done) / rate * 1000).toLong() else 0L
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh), border = cardLine()) {
                     Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                         Metric("Elapsed", Fmt.duration(elapsed))
                         Metric("Speed", if (rate >= 1) String.format(java.util.Locale.US, "%.1f/s", rate) else if (rate > 0) String.format(java.util.Locale.US, "%.0f/min", rate * 60) else "—")
@@ -151,7 +151,7 @@ fun RunScreen(nav: NavHostController) {
             }
             item {
                 AnimatedVisibility(l.active && l.current != null, enter = fadeIn(), exit = fadeOut()) {
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer), border = cardLine()) {
                         Column(Modifier.fillMaxWidth().padding(16.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(if (l.running > 1) "Now running · ${l.running} at once" else "Now running", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.weight(1f))
@@ -181,22 +181,22 @@ fun RunScreen(nav: NavHostController) {
             item {
               Column {
                 AnimatedVisibility(!l.active && l.pairIds.size == 2, enter = fadeIn() + scaleIn(initialScale = 0.95f)) {
-                    Button(onClick = { nav.navigate(route("compare", l.pairIds[0], l.pairIds[1])) }, modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp), shape = RoundedCornerShape(14.dp)) {
+                    Button(shape = BtnShape, onClick = { nav.navigate(route("compare", l.pairIds[0], l.pairIds[1])) }, modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp), shape = RoundedCornerShape(6.dp)) {
                         Icon(Icons.AutoMirrored.Filled.CompareArrows, null); Spacer(Modifier.width(6.dp)); Text("Compare the two drivers")
                     }
                 }
                 AnimatedVisibility(!l.active, enter = fadeIn() + scaleIn(initialScale = 0.95f)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Button(onClick = { if (l.sessionId.isNotEmpty()) nav.navigate(route("session", l.sessionId)) }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp)) {
+                        Button(shape = BtnShape, onClick = { if (l.sessionId.isNotEmpty()) nav.navigate(route("session", l.sessionId)) }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(6.dp)) {
                             Icon(Icons.Filled.Assessment, null); Spacer(Modifier.width(6.dp)); Text("Results")
                         }
-                        OutlinedButton(onClick = { if (l.sessionId.isNotEmpty()) nav.navigate(route("folder", l.sessionId, ".")) }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp)) {
+                        OutlinedButton(shape = BtnShape, onClick = { if (l.sessionId.isNotEmpty()) nav.navigate(route("folder", l.sessionId, ".")) }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(6.dp)) {
                             Icon(Icons.Filled.Folder, null); Spacer(Modifier.width(6.dp)); Text("Files")
                         }
                     }
                 }
                 AnimatedVisibility(l.active, enter = fadeIn(), exit = fadeOut()) {
-                    OutlinedButton(onClick = { AppGraph.runs.stop() }, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(14.dp)) {
+                    OutlinedButton(shape = BtnShape, onClick = { AppGraph.runs.stop() }, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(6.dp)) {
                         Icon(Icons.Filled.Stop, null); Spacer(Modifier.width(6.dp)); Text("Stop run")
                     }
                 }
@@ -239,7 +239,7 @@ private fun StatGrid(l: RunManager.Live) {
     val cells = listOf(Bucket.PASSED, Bucket.FAILED, Bucket.CRASHED, Bucket.SKIPPED)
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         for (b in cells) {
-            Card(Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = colors[b].copy(alpha = 0.13f))) {
+            Card(Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = colors[b].copy(alpha = 0.13f)), border = cardLine()) {
                 Column(Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     AnimatedNumber(l.counts[b].toLong(), MaterialTheme.typography.titleLarge, colors[b])
                     Text(b.label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)

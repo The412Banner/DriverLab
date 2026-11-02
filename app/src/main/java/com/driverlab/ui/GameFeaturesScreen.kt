@@ -116,7 +116,7 @@ fun GameFeaturesScreen(nav: NavHostController) {
 
 @Composable
 private fun CheckRow(d: DriverInfo, rep: GameFeatures.Report?, checking: Boolean, error: String?, onCheck: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh), shape = RoundedCornerShape(14.dp)) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh), border = cardLine(), shape = RoundedCornerShape(6.dp)) {
         Column(Modifier.fillMaxWidth().padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -131,7 +131,7 @@ private fun CheckRow(d: DriverInfo, rep: GameFeatures.Report?, checking: Boolean
                     )
                 }
                 if (!checking) {
-                    if (rep == null) FilledTonalButton(onClick = onCheck) { Text("Check") } else OutlinedButton(onClick = onCheck) { Text("Again") }
+                    if (rep == null) FilledTonalButton(shape = BtnShape, onClick = onCheck) { Text("Check") } else OutlinedButton(shape = BtnShape, onClick = onCheck) { Text("Again") }
                 }
             }
             if (checking) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 6.dp))
@@ -146,8 +146,8 @@ private fun ProfileCard(p: GameFeatures.Profile, shown: List<DriverInfo>, report
     var open by rememberSaveable(p.id) { mutableStateOf(false) }
     Card(
         Modifier.fillMaxWidth().clickable { open = !open },
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer), border = cardLine(),
+        shape = RoundedCornerShape(6.dp),
     ) {
         Column(Modifier.padding(16.dp).animateContentSize()) {
             Text(p.title, style = MaterialTheme.typography.titleMedium)
@@ -191,7 +191,7 @@ private fun ProfileCard(p: GameFeatures.Profile, shown: List<DriverInfo>, report
                 Text("Tap for details", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
             }
             Spacer(Modifier.height(8.dp))
-            FilledTonalButton(onClick = onSelect) { Text("Select its tests") }
+            FilledTonalButton(shape = BtnShape, onClick = onSelect) { Text("Select its tests") }
         }
     }
 }

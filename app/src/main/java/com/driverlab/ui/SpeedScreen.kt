@@ -126,7 +126,7 @@ fun SpeedScreen(nav: NavHostController) {
                 item { SectionTitle("Scenes") }
                 items(SpeedScenes.all, key = { it.id }) { s ->
                     Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp))
                             .clickable { scenes = if (s.id in scenes) scenes - s.id else SpeedScenes.all.map { it.id }.filter { it in scenes || it == s.id } }
                             .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -165,7 +165,7 @@ fun SpeedScreen(nav: NavHostController) {
                         },
                         enabled = scenes.isNotEmpty() && !busyElsewhere,
                         modifier = Modifier.fillMaxWidth().height(56.dp),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(6.dp),
                     ) {
                         Icon(Icons.Filled.Speed, null)
                         Spacer(Modifier.width(8.dp))
@@ -178,7 +178,7 @@ fun SpeedScreen(nav: NavHostController) {
                 items(past.take(30), key = { "p" + it.id }) { r ->
                     Card(
                         Modifier.fillMaxWidth().clickable { nav.navigate(route("speedresult", r.id)) },
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh), border = cardLine(),
                     ) {
                         Column(Modifier.padding(14.dp)) {
                             Text(r.drivers.joinToString(" vs ") { it.name }, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -224,9 +224,9 @@ fun SpeedScreen(nav: NavHostController) {
 
 @Composable
 private fun DriverPickRow(label: String, name: String, onClick: () -> Unit) {
-    Card(Modifier.fillMaxWidth().clickable(onClick = onClick), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
+    Card(Modifier.fillMaxWidth().clickable(onClick = onClick), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh), border = cardLine()) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(32.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(32.dp).clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
                 Text(label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
             }
             Spacer(Modifier.width(12.dp))
@@ -248,7 +248,7 @@ private fun ChoiceRow(label: String, options: List<Int>, value: Int, text: (Int)
 
 @Composable
 private fun SpeedLiveCard(l: SpeedManager.Live, nav: NavHostController) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer), border = cardLine()) {
         Column(Modifier.padding(16.dp).animateContentSize()) {
             Text(
                 when (l.phase) {
@@ -294,15 +294,15 @@ private fun SpeedLiveCard(l: SpeedManager.Live, nav: NavHostController) {
             }
             Spacer(Modifier.height(10.dp))
             if (l.active) {
-                OutlinedButton(onClick = { AppGraph.speed.stop() }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
+                OutlinedButton(shape = BtnShape, onClick = { AppGraph.speed.stop() }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(6.dp)) {
                     Icon(Icons.Filled.Stop, null); Spacer(Modifier.width(6.dp)); Text("Stop")
                 }
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (l.id.isNotEmpty() && AppGraph.speed.load(l.id) != null) {
-                        Button(onClick = { nav.navigate(route("speedresult", l.id)) }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp)) { Text("Results") }
+                        Button(shape = BtnShape, onClick = { nav.navigate(route("speedresult", l.id)) }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(6.dp)) { Text("Results") }
                     }
-                    OutlinedButton(onClick = { AppGraph.speed.dismiss() }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp)) { Text("New test") }
+                    OutlinedButton(shape = BtnShape, onClick = { AppGraph.speed.dismiss() }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(6.dp)) { Text("New test") }
                 }
             }
         }
@@ -311,7 +311,7 @@ private fun SpeedLiveCard(l: SpeedManager.Live, nav: NavHostController) {
 
 /** The small live picture: the program writes a downscaled frame to a file a few times a second. */
 @Composable
-private fun PreviewWindow(file: File, modifier: Modifier = Modifier, rounded: Boolean = true) {
+fun PreviewWindow(file: File, modifier: Modifier = Modifier, rounded: Boolean = true) {
     val image by produceState<ImageBitmap?>(null, file) {
         var last = 0L
         while (true) {
@@ -324,7 +324,7 @@ private fun PreviewWindow(file: File, modifier: Modifier = Modifier, rounded: Bo
         }
     }
     Box(
-        (if (rounded) Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(12.dp)) else Modifier)
+        (if (rounded) Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(4.dp)) else Modifier)
             .background(Color.Black).then(modifier),
         contentAlignment = Alignment.Center,
     ) {
@@ -338,7 +338,7 @@ private fun readPreview(f: File): ImageBitmap? = SpeedPictures.readRaw(f)?.asIma
 
 /** A picture over the whole screen; tap anywhere to close. */
 @Composable
-private fun FullScreenPicture(onClose: () -> Unit, content: @Composable () -> Unit) {
+fun FullScreenPicture(onClose: () -> Unit, content: @Composable () -> Unit) {
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxSize().background(Color.Black).clickable(onClick = onClose), contentAlignment = Alignment.Center) {
             content()
@@ -357,7 +357,7 @@ private fun PictureCheckCard(r: SpeedResult) {
     val anyBad = r.pictures.any { it.share >= 0 && !it.matches }
     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(
         containerColor = if (anyBad) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-    )) {
+    ), border = cardLine()) {
         Column(Modifier.padding(14.dp)) {
             Text("Picture check", style = MaterialTheme.typography.titleSmall)
             Text(
@@ -417,7 +417,7 @@ fun SpeedResultScreen(nav: NavHostController, id: String) {
         val letters = listOf("A", "B")
         LazyColumn(Modifier.fillMaxSize().padding(pad), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item {
-                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
+                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh), border = cardLine()) {
                     Column(Modifier.padding(16.dp)) {
                         r.drivers.forEachIndexed { i, d ->
                             Text("${letters[i]}  ${d.name}", style = MaterialTheme.typography.titleSmall)
@@ -438,7 +438,7 @@ fun SpeedResultScreen(nav: NavHostController, id: String) {
             if (r.pictures.isNotEmpty()) item { PictureCheckCard(r) }
             items(rows, key = { it.scene }) { row ->
                 val scene = SpeedScenes.byId(row.scene)
-                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = if (row.clear) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh)) {
+                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = if (row.clear) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh), border = cardLine()) {
                     Column(Modifier.padding(14.dp)) {
                         Text(scene?.title ?: row.scene, style = MaterialTheme.typography.titleSmall)
                         Spacer(Modifier.height(4.dp))

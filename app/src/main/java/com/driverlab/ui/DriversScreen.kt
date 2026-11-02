@@ -87,7 +87,7 @@ fun DriversScreen(nav: NavHostController) {
     }
     Scaffold(
         topBar = {
-            AppBar("Drivers", subtitle = "System driver and imported Vulkan drivers", actions = {
+            AppBar("Drivers", subtitle = "System driver and imported Vulkan drivers", onBack = { nav.popBackStack() }, actions = {
                 IconButton(onClick = { nav.navigate("features") }) { Icon(Icons.Filled.SportsEsports, "Game features") }
             })
         },
@@ -209,8 +209,8 @@ private fun DriverCard(
     val status = LocalStatusColors.current
     Card(
         modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = if (inUse) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh),
-        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = if (inUse) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh), border = cardLine(),
+        shape = RoundedCornerShape(6.dp),
     ) {
         Column(Modifier.padding(16.dp).animateContentSize()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -277,7 +277,7 @@ private fun DriverCard(
             }
             Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (!inUse) FilledTonalButton(onClick = onUse) { Text("Use") } else AssistChip(onClick = {}, label = { Text("In use") })
+                if (!inUse) FilledTonalButton(shape = BtnShape, onClick = onUse) { Text("Use") } else AssistChip(onClick = {}, label = { Text("In use") })
                 Spacer(Modifier.weight(1f))
                 IconButton(onClick = onCheck, enabled = !checking) { Icon(Icons.Filled.Refresh, "Check again") }
                 IconButton(onClick = onOptions) { Icon(Icons.Filled.Tune, "Options") }

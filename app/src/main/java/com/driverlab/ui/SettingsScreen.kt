@@ -157,7 +157,7 @@ fun SettingsScreen(nav: NavHostController) {
             }
             item { SectionTitle("About") }
             item {
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh), border = cardLine()) {
                     Column(Modifier.padding(16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Logo(44.dp)
@@ -186,7 +186,7 @@ private const val CREDITS =
 
 @Composable
 private fun SettingCard(title: String, sub: String, content: @Composable () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh), border = cardLine()) {
         Column(Modifier.padding(16.dp)) {
             Text(title, style = MaterialTheme.typography.titleSmall)
             Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -198,7 +198,7 @@ private fun SettingCard(title: String, sub: String, content: @Composable () -> U
 
 @Composable
 private fun SwitchRow(title: String, sub: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh), border = cardLine()) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.titleSmall)
@@ -230,7 +230,7 @@ fun SetupScreen(state: CtsSetup.State) {
                     androidx.compose.material3.Icon(Icons.Filled.ErrorOutline, null, tint = MaterialTheme.colorScheme.error)
                     Text(state.message, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(12.dp))
-                    Button(onClick = { scope.launch(Dispatchers.IO) { AppGraph.setup.ensure() } }) { Text("Try again") }
+                    Button(shape = BtnShape, onClick = { scope.launch(Dispatchers.IO) { AppGraph.setup.ensure() } }) { Text("Try again") }
                 }
                 else -> LinearProgressIndicator(Modifier.fillMaxWidth(0.7f))
             }

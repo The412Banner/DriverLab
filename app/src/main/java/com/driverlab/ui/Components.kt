@@ -14,7 +14,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.border
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -35,6 +37,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -60,6 +63,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.driverlab.R
 import com.driverlab.core.Bucket
 import com.driverlab.core.Counts
@@ -69,6 +73,7 @@ import com.driverlab.ui.theme.LocalStatusColors
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppBar(title: String, subtitle: String? = null, onBack: (() -> Unit)? = null, actions: @Composable () -> Unit = {}) {
+  Column {
     TopAppBar(
         title = {
             Column {
@@ -85,6 +90,8 @@ fun AppBar(title: String, subtitle: String? = null, onBack: (() -> Unit)? = null
         actions = { actions() },
         colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
     )
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+  }
 }
 
 @Composable
@@ -169,9 +176,84 @@ fun SegmentBar(counts: Counts, modifier: Modifier = Modifier, height: Dp = 8.dp)
 @Composable
 fun StatusPill(status: TestStatus, modifier: Modifier = Modifier) {
     val c = LocalStatusColors.current[status.bucket]
-    Surface(color = c.copy(alpha = 0.16f), shape = RoundedCornerShape(50), modifier = modifier) {
-        Text(status.label, color = c, style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp), maxLines = 1)
+    Surface(color = c.copy(alpha = 0.08f), shape = RoundedCornerShape(3.dp), border = BorderStroke(1.dp, c.copy(alpha = 0.7f)), modifier = modifier) {
+        Text(status.label.uppercase(), color = c, style = MaterialTheme.typography.labelSmall, fontFamily = com.driverlab.ui.theme.Mono,
+            fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), maxLines = 1)
+    }
+}
+
+/** Corner shape for buttons (Material buttons are fully round by default). */
+val BtnShape = RoundedCornerShape(4.dp)
+
+/** The thin outline every card and panel gets. */
+@Composable
+fun cardLine(): BorderStroke = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+
+/** A small uppercase label, as used on tiles and panel headers. */
+@Composable
+fun TileLabel(text: String, modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
+    Text(text.uppercase(), modifier = modifier, color = color, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, maxLines = 1,
+        overflow = TextOverflow.Ellipsis)
+}
+
+/** Live line graph: newest value on the right, scaled to the largest value shown, with a light fill under it. */
+@Composable
+fun Sparkline(values: List<Double>, color: Color, modifier: Modifier = Modifier) {
+    val grid = MaterialTheme.colorScheme.outlineVariant
+    Canvas(modifier) {
+        val h = size.height
+        val w = size.width
+        for (i in 1..3) drawLine(grid, Offset(0f, h * i / 4f), Offset(w, h * i / 4f), strokeWidth = 1f)
+        if (values.size < 2) return@Canvas
+        val max = (values.maxOrNull() ?: 1.0).coerceAtLeast(1e-9) * 1.15
+        val step = w / (values.size - 1)
+        val path = androidx.compose.ui.graphics.Path()
+        values.forEachIndexed { i, v ->
+            val x = i * step
+            val y = h - (v / max * (h - 4)).toFloat() - 2f
+            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        }
+        val fill = androidx.compose.ui.graphics.Path().apply {
+            addPath(path)
+            lineTo(w, h)
+            lineTo(0f, h)
+            close()
+        }
+        drawPath(fill, color.copy(alpha = 0.14f))
+        drawPath(path, color, style = Stroke(width = 1.6.dp.toPx(), join = androidx.compose.ui.graphics.StrokeJoin.Round))
+        val last = values.last()
+        drawCircle(color, 2.5.dp.toPx(), Offset(w, h - (last / max * (h - 4)).toFloat() - 2f))
+    }
+}
+
+/** Result ring: passed, failed, crashed and other results as arcs, with text in the middle. */
+@Composable
+fun ResultRing(counts: Counts, modifier: Modifier = Modifier, stroke: Dp = 8.dp, center: String, sub: String = "pass") {
+    val colors = LocalStatusColors.current
+    val track = MaterialTheme.colorScheme.surfaceContainerHighest
+    Box(modifier, contentAlignment = Alignment.Center) {
+        Canvas(Modifier.fillMaxSize()) {
+            val w = stroke.toPx()
+            val d = size.minDimension - w
+            val tl = Offset((size.width - d) / 2, (size.height - d) / 2)
+            val sz = Size(d, d)
+            drawArc(track, 0f, 360f, false, tl, sz, style = Stroke(w))
+            val total = counts.total
+            if (total > 0) {
+                var start = -90f
+                for (b in listOf(Bucket.PASSED, Bucket.FAILED, Bucket.CRASHED, Bucket.WARNING, Bucket.SKIPPED)) {
+                    val part = 360f * counts[b] / total
+                    if (part > 0.05f) {
+                        drawArc(colors[b], start, part, false, tl, sz, style = Stroke(w, cap = StrokeCap.Butt))
+                        start += part
+                    }
+                }
+            }
+        }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(center, fontFamily = com.driverlab.ui.theme.Mono, fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
+            Text(sub.uppercase(), fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 
@@ -197,15 +279,15 @@ fun CountsRow(counts: Counts, modifier: Modifier = Modifier) {
 
 @Composable
 fun SectionTitle(text: String, modifier: Modifier = Modifier) {
-    Text(text.uppercase(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary,
-        fontWeight = FontWeight.Bold, modifier = modifier.padding(start = 4.dp, top = 8.dp, bottom = 6.dp))
+    Text(text.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        fontWeight = FontWeight.Bold, letterSpacing = 1.sp, modifier = modifier.padding(start = 2.dp, top = 8.dp, bottom = 4.dp))
 }
 
 @Composable
 fun EmptyState(icon: ImageVector, title: String, body: String, modifier: Modifier = Modifier, action: @Composable () -> Unit = {}) {
     Column(modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(Modifier.size(72.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
-            Icon(icon, null, Modifier.size(36.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+        Box(Modifier.size(72.dp).clip(RoundedCornerShape(8.dp)).border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
+            Icon(icon, null, Modifier.size(36.dp), tint = MaterialTheme.colorScheme.primary)
         }
         Spacer(Modifier.height(16.dp))
         Text(title, style = MaterialTheme.typography.titleMedium)
@@ -227,7 +309,7 @@ fun InfoLine(label: String, value: String, mono: Boolean = false) {
 
 @Composable
 fun IconBadge(icon: ImageVector, tint: Color, modifier: Modifier = Modifier, size: Dp = 40.dp) {
-    Box(modifier.size(size).clip(RoundedCornerShape(12.dp)).background(tint.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
+    Box(modifier.size(size).clip(RoundedCornerShape(4.dp)).border(1.dp, tint.copy(alpha = 0.6f), RoundedCornerShape(4.dp)).background(tint.copy(alpha = 0.08f)), contentAlignment = Alignment.Center) {
         Icon(icon, null, tint = tint, modifier = Modifier.size(size * 0.55f))
     }
 }

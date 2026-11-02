@@ -54,7 +54,7 @@ fun FlagCheckScreen(nav: NavHostController, sessionId: String, test: String) {
     }) { pad ->
         LazyColumn(Modifier.fillMaxSize().padding(pad), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             item {
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh), shape = RoundedCornerShape(18.dp)) {
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh), border = cardLine(), shape = RoundedCornerShape(6.dp)) {
                     Column(Modifier.padding(16.dp)) {
                         Text(
                             "Runs this test again on ${driver?.name ?: "the driver"}: once with its own options, then once with each " +
@@ -67,9 +67,9 @@ fun FlagCheckScreen(nav: NavHostController, sessionId: String, test: String) {
                             driver == null -> Text("The driver of this run is no longer installed.", color = MaterialTheme.colorScheme.error)
                             !FlagCheck.isTurnip(driver) -> Text("This driver doesn't look like Turnip, so these settings would do nothing.", color = MaterialTheme.colorScheme.error)
                             runBusy -> Text("A test run is going on. Start this when it has finished.", color = MaterialTheme.colorScheme.error)
-                            running && mine != null -> OutlinedButton(onClick = { AppGraph.flagCheck.stop() }) { Text("Stop") }
+                            running && mine != null -> OutlinedButton(shape = BtnShape, onClick = { AppGraph.flagCheck.stop() }) { Text("Stop") }
                             running -> Text("Another check is running.", color = MaterialTheme.colorScheme.error)
-                            else -> Button(onClick = { AppGraph.flagCheck.start(sessionId, test, driver.id) }) {
+                            else -> Button(shape = BtnShape, onClick = { AppGraph.flagCheck.start(sessionId, test, driver.id) }) {
                                 Text(if (mine == null) "Start (${FlagCheck.FLAGS.size + 1} runs)" else "Run again")
                             }
                         }
@@ -89,7 +89,7 @@ fun FlagCheckScreen(nav: NavHostController, sessionId: String, test: String) {
                     Text(text, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 4.dp))
                 }
                 itemsIndexed(mine.rows) { _, row ->
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer), shape = RoundedCornerShape(14.dp)) {
+                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer), border = cardLine(), shape = RoundedCornerShape(6.dp)) {
                         Column(Modifier.fillMaxWidth().padding(12.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f)) {

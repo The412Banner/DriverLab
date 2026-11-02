@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -121,7 +122,9 @@ fun ResultsScreen(nav: NavHostController) {
     val byDay = shown.groupBy { dayLabel(it.startedAt) }
     Scaffold(
         topBar = {
-            AppBar("Results", subtitle = "${sessions.size} sessions", actions = {
+            AppBar("Results", subtitle = "${sessions.size} sessions", onBack = { nav.popBackStack() }, actions = {
+                IconButton(onClick = { nav.navigate("speed") }) { Icon(Icons.Filled.Speed, "Speed tests") }
+                IconButton(onClick = { nav.navigate("files") }) { Icon(Icons.Filled.Folder, "Files") }
                 IconButton(onClick = { comparing = !comparing; picked = emptyList() }) { Icon(Icons.Filled.SwapHoriz, "Compare two sessions") }
             })
         },
@@ -144,7 +147,7 @@ fun ResultsScreen(nav: NavHostController) {
                 OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(top = 8.dp), placeholder = { Text("Search driver, GPU, tests, date") },
                     leadingIcon = { Icon(Icons.Filled.Search, null) },
                     trailingIcon = { if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Filled.Clear, "Clear") } },
-                    singleLine = true, shape = RoundedCornerShape(14.dp))
+                    singleLine = true, shape = RoundedCornerShape(6.dp))
             }
             item {
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -283,7 +286,7 @@ fun SessionScreen(nav: NavHostController, id: String) {
                 OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), placeholder = { Text("Search names and messages") },
                     leadingIcon = { Icon(Icons.Filled.Search, null) },
                     trailingIcon = { if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Filled.Clear, "Clear") } },
-                    singleLine = true, shape = RoundedCornerShape(14.dp))
+                    singleLine = true, shape = RoundedCornerShape(6.dp))
             }
             item {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -436,7 +439,7 @@ private fun ExtraChip(filter: String?, key: String, label: String, n: Int, pick:
 
 @Composable
 fun SessionHeader(m: SessionMeta, running: Boolean) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh), border = cardLine()) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             ProgressRing(m.counts, 1f, running, Modifier.size(96.dp), stroke = 10.dp) {
                 Text(if (m.counts.total == 0) "—" else "${m.counts.passed * 100 / m.counts.total.coerceAtLeast(1)}%", style = MaterialTheme.typography.titleMedium)
@@ -478,7 +481,7 @@ fun SessionHeader(m: SessionMeta, running: Boolean) {
 private fun GroupHeader(g: ResultGroup, open: Boolean, onToggle: () -> Unit) {
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxWidth()) {
         Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(onClick = onToggle).padding(horizontal = 6.dp, vertical = 8.dp),
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)).clickable(onClick = onToggle).padding(horizontal = 6.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, if (open) "Collapse" else "Expand", Modifier.size(20.dp))
@@ -498,7 +501,7 @@ private fun GroupHeader(g: ResultGroup, open: Boolean, onToggle: () -> Unit) {
 @Composable
 fun ResultRow(r: TestResult, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick).padding(horizontal = 6.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)).clickable(onClick = onClick).padding(horizontal = 6.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         StatusDot(r.status.bucket)
@@ -569,7 +572,7 @@ fun TestDetailScreen(nav: NavHostController, id: String, name: String) {
     }) { pad ->
         Column(Modifier.fillMaxSize().padding(pad)) {
             if (r == null) { LinearProgressIndicator(Modifier.fillMaxWidth()); return@Column }
-            Card(Modifier.padding(16.dp).fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
+            Card(Modifier.padding(16.dp).fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh), border = cardLine()) {
                 Column(Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         StatusPill(r.status)
@@ -602,7 +605,7 @@ fun TestDetailScreen(nav: NavHostController, id: String, name: String) {
                         (r.status.bucket == Bucket.FAILED || r.status.bucket == Bucket.CRASHED)
                     ) {
                         Spacer(Modifier.height(8.dp))
-                        FilledTonalButton(onClick = { nav.navigate(route("flags", id, name)) }) { Text("Find a setting that fixes it") }
+                        FilledTonalButton(shape = BtnShape, onClick = { nav.navigate(route("flags", id, name)) }) { Text("Find a setting that fixes it") }
                     }
                 }
             }
@@ -672,7 +675,7 @@ private fun CaptureView(nav: NavHostController, id: String, name: String, captur
             Spacer(Modifier.height(8.dp))
         }
         if (others.isNotEmpty()) item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer), border = cardLine()) {
                 Column(Modifier.padding(12.dp)) {
                     Text("Compare with another driver", style = MaterialTheme.typography.titleSmall)
                     for (o in others.take(6)) {
@@ -686,7 +689,7 @@ private fun CaptureView(nav: NavHostController, id: String, name: String, captur
         }
         item {
             OutlinedTextField(filter, { filter = it }, Modifier.fillMaxWidth(), placeholder = { Text("Filter registers") },
-                leadingIcon = { Icon(Icons.Filled.Search, null) }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                leadingIcon = { Icon(Icons.Filled.Search, null) }, singleLine = true, shape = RoundedCornerShape(6.dp))
             Spacer(Modifier.height(8.dp))
         }
         items(rows, key = { it.first }) { (off, nm) ->
@@ -735,7 +738,7 @@ fun CompareScreen(nav: NavHostController, a: String, b: String) {
         if (c == null) { LinearProgressIndicator(Modifier.fillMaxWidth().padding(pad)); return@Scaffold }
         LazyColumn(Modifier.fillMaxSize().padding(pad), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             item {
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh), border = cardLine()) {
                     Column(Modifier.padding(16.dp).animateContentSize()) {
                         Text("A  ${ma?.driverName.orEmpty()}", style = MaterialTheme.typography.titleSmall)
                         Text("B  ${mb?.driverName.orEmpty()}", style = MaterialTheme.typography.titleSmall)
@@ -803,7 +806,7 @@ fun RegisterDiffScreen(nav: NavHostController, a: String, b: String, name: Strin
         val rows = if (onlyDiff) d.rows.filter { !it.same } else d.rows
         LazyColumn(Modifier.fillMaxSize().padding(pad), contentPadding = PaddingValues(16.dp)) {
             item {
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh), border = cardLine()) {
                     Column(Modifier.padding(14.dp)) {
                         Text("A  ${ma?.driverName.orEmpty()}  ·  ${d.sa.submits} submits, ${d.sa.regs.size} registers", style = MaterialTheme.typography.bodySmall)
                         Text("B  ${mb?.driverName.orEmpty()}  ·  ${d.sb.submits} submits, ${d.sb.regs.size} registers", style = MaterialTheme.typography.bodySmall)

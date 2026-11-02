@@ -17,6 +17,12 @@ is loaded only inside DriverLab's own test program. No root needed.
 
 ## What it can do
 
+- **Home is one dashboard:** driver A against driver B, Conformance or Speed test, one Start
+  button and four live tiles (pass rate, tests per second, repeat, GPU health; for the speed
+  test the live picture, frame time and the score). Upright it is one column; sideways (or on a
+  wide screen) the setup sits on the left and the tiles on the right. Tests, Results, Drivers
+  and Settings open from the icons at the top.
+
 - **Tests**
   - the official Vulkan conformance tests (Khronos CTS 1.4.7.1, 3.2 million tests);
   - 68 OpenGL ES programs: the set used by the adreno-cmdstream-gather app
@@ -130,6 +136,9 @@ normal app change builds in a few minutes. APKs are signed with the public
 AOSP test key (v1, v2 and v3).
 
 ## Credits
+
+- JetBrains Mono (numbers and test names in the app): The JetBrains Mono Project Authors, SIL Open
+  Font License 1.1 (`app/src/main/assets/licenses/JetBrainsMono-OFL.txt`).
 
 - Khronos Group: Vulkan CTS (Apache 2.0).
 - Rob Clark and the freedreno and Mesa developers: the OpenGL ES test

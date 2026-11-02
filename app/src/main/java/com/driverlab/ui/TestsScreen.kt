@@ -143,6 +143,7 @@ fun TestsScreen(nav: NavHostController) {
             AppBar(
                 "Tests",
                 subtitle = "${Fmt.count(count)} of ${Fmt.count(catalog.total)} selected · ${catalog.ctsTag}",
+                onBack = { nav.popBackStack() },
                 actions = {
                     IconButton(onClick = { AppGraph.selection.selectAll() }) { Icon(Icons.Filled.SelectAll, "Select all") }
                     IconButton(onClick = { AppGraph.selection.clear() }) { Icon(Icons.Filled.ClearAll, "Clear selection") }
@@ -178,7 +179,7 @@ fun TestsScreen(nav: NavHostController) {
                             Text("${Fmt.count(count)} tests", style = MaterialTheme.typography.titleMedium)
                             Text(label ?: "Custom selection", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Button(onClick = starter.start, enabled = live?.active != true, shape = RoundedCornerShape(14.dp)) {
+                        Button(shape = BtnShape, onClick = starter.start, enabled = live?.active != true, shape = RoundedCornerShape(6.dp)) {
                             Icon(Icons.Filled.PlayArrow, null)
                             Spacer(Modifier.width(6.dp))
                             Text("Run")
@@ -197,7 +198,7 @@ fun TestsScreen(nav: NavHostController) {
                 leadingIcon = { Icon(Icons.Filled.Search, null) },
                 trailingIcon = { if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Filled.Clear, "Clear") } },
                 singleLine = true,
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(6.dp),
             )
             PresetChips(
                 catalog.presets, label, { p -> scope.launch { AppGraph.selection.applyPreset(p) } },
