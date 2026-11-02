@@ -404,7 +404,7 @@ private fun SetupBlock(
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 FilterChip(selected = true, onClick = onScenes, label = { Text("${sc.size} of ${SpeedScenes.all.size} scenes") })
                 FilterChip(selected = false, onClick = { AppGraph.settings.update { it.copy(speedRounds = cycle(listOf(1, 3, 5), it.speedRounds)) } },
-                    label = { Text("${s.settings.speedRounds} rounds") })
+                    label = { Text(if (s.settings.speedRounds == 1) "1 round" else "${s.settings.speedRounds} rounds") })
                 FilterChip(selected = false, onClick = { AppGraph.settings.update { it.copy(speedSeconds = cycle(listOf(3, 5, 10), it.speedSeconds)) } },
                     label = { Text("${s.settings.speedSeconds} s each") })
                 FilterChip(selected = false, onClick = { AppGraph.settings.update { it.copy(speedPause = cycle(listOf(0, 10, 30), it.speedPause)) } },
@@ -496,7 +496,8 @@ private fun ProgressLine(fraction: Float, text: String, onClick: (() -> Unit)?) 
         Modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier).padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        LinearProgressIndicator(progress = { fraction }, modifier = Modifier.weight(1f).height(4.dp), drawStopIndicator = {}, gapSize = 0.dp)
+        LinearProgressIndicator(progress = { fraction }, modifier = Modifier.weight(1f).height(4.dp), drawStopIndicator = {}, gapSize = 0.dp,
+            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest)
         Text(text, fontFamily = Mono, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f, fill = false))
     }
@@ -654,7 +655,8 @@ private fun PictureTile(s: DashState, modifier: Modifier, fill: Boolean = false)
     val accent = if (isB) dc.b else dc.a
     var big by remember { mutableStateOf(false) }
     Tile(modifier, padding = false) {
-        Row(Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TileLabel("Live picture" + (l?.scene?.takeIf { s.speedActive }?.let { " · " + (SpeedScenes.byId(it)?.title ?: it) } ?: ""), Modifier.weight(1f))
             if (s.speedActive) Text((if (isB) "B · " else "A · ") + (l?.driverName ?: ""), fontFamily = Mono, fontSize = 11.sp, color = accent,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
@@ -719,10 +721,11 @@ private fun ScoreTile(s: DashState, modifier: Modifier) {
     val dc = LocalDriverColors.current
     val l = s.speed
     // Live: verdicts from the rounds so far. Idle: the last finished speed test.
-    val result: SpeedResult? = if (l != null && l.samples.isNotEmpty() && l.bId != null) {
+    val finished = s.lastSpeed?.takeIf { l == null || (!l.active && it.id == l.id) }
+    val result: SpeedResult? = if (finished == null && l != null && l.samples.isNotEmpty() && l.bId != null) {
         val req = SpeedRequest(l.aId, l.bId, SpeedScenes.all.map { it.id }.filter { id -> l.samples.any { it.scene == id } }, l.rounds, 0, 0, false)
         SpeedResult(l.id, l.startedAt, 0, "running", req, listOf(SpeedDriver(l.aId, "A", "", "", ""), SpeedDriver(l.bId, "B", "", "", "")), l.samples, emptyList(), "")
-    } else s.lastSpeed?.takeIf { it.drivers.size == 2 }
+    } else (finished ?: s.lastSpeed)?.takeIf { it.drivers.size == 2 }
     val rows = result?.let { SpeedMath.rows(it) }.orEmpty().filter { r -> r.stats.size == 2 && r.stats.values.all { it.runs > 0 } }
     val aId = result?.drivers?.getOrNull(0)?.id
     val bId = result?.drivers?.getOrNull(1)?.id

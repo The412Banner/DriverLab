@@ -33,8 +33,9 @@ private val Light = lightColorScheme(
     onPrimaryContainer = Color(0xFF07214F),
     secondary = Color(0xFF0E7C72),
     onSecondary = Color(0xFFFFFFFF),
-    secondaryContainer = Color(0xFFCDEFEB),
-    onSecondaryContainer = Color(0xFF00201D),
+    // Selected chips, tonal buttons and slider tracks: blue like the accent.
+    secondaryContainer = Color(0xFFDCE7FF),
+    onSecondaryContainer = Color(0xFF07214F),
     tertiary = Color(0xFF6A4FC8),
     onTertiary = Color(0xFFFFFFFF),
     tertiaryContainer = Color(0xFFE6DEFF),
@@ -64,8 +65,9 @@ private val Dark = darkColorScheme(
     onPrimaryContainer = Color(0xFFCFE0FF),
     secondary = Color(0xFF5FE6D7),
     onSecondary = Color(0xFF00201D),
-    secondaryContainer = Color(0xFF0F3532),
-    onSecondaryContainer = Color(0xFFBFF5EF),
+    // Selected chips, tonal buttons and slider tracks: blue like the accent.
+    secondaryContainer = Color(0xFF13284A),
+    onSecondaryContainer = Color(0xFFCFE0FF),
     tertiary = Color(0xFFC4B2FF),
     onTertiary = Color(0xFF21005D),
     tertiaryContainer = Color(0xFF2A2350),
