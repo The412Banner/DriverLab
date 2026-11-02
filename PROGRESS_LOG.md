@@ -46,7 +46,12 @@ CI 41447833663 (headSha 3e5a1b0) success; STAGED /sdcard/Download/DriverLab-dash
 CI == device); old 957643f0 staged APK removed (that build stays installed).
 **User: "install it"** → installing 3e5a1b04 on the Pocket FIT for a quick look at the fixes (settings backup
 /data/local/tmp/driverlab-settings.xml.bak-dash2; restore after; Termux back; peer done).
-**Resume point:** after the check, merge = user's go. Device test was: dashboard upright + sideways
+**CHECK 3e5a1b04 on the Pocket FIT 08:00–08:03 local (installed hash 583958d9… == staged; peer told + done):** Record chip
+blue, progress track dark (not teal), speed tiles "Last speed test A 1 / B 5" + "pictures match" tag, Drivers "Use"
+button blue, Tests run bar above the system buttons (152 tests · Quick check · Run). Left: the Recent list says
+"1 rounds" (not fixed there yet). Settings restored (cmp), crash buffer 0, FATAL/ANR 0, Termux back.
+Proof: 3e5a1b0 device-checked on the Pocket FIT; branch head = this log commit.
+**Resume point:** merge = user's go (backup ref first; tree must equal 3e5a1b0 + log). Device test was: dashboard upright + sideways
 (rotate), conformance Start/Stop + live tiles, speed test live picture/frame time/score, header icons, back arrows.
 
 ## 2026-11-02 — MERGED feat/speed-and-repeat into main (user: "merge it")
