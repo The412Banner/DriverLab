@@ -29,8 +29,23 @@ lists a618/a660/a6xx/a702/a750; Turnip sessions only, closest list labelled), dr
 only above max(spread, 3 %), preview window reading a raw RGBA file). CI 41424210720 (headSha a48e713)
 = compile check; native benchmark (native/dlbench) is being written in parallel, not committed yet.
 
-**Resume point:** branch feat/speed-and-repeat; app side committed (a48e713), native/dlbench uncommitted
-in the worktree /root/src/DriverLab-wt/speed. Nothing installed.
+**CI:** 41424210720 (a48e713, app only) success — Kotlin compiled first try. d62271c = native/dlbench
+(helper session, own code: 9 scenes, picture checks, preview file; tested by it on the Pocket FIT with
+system driver + Turnip r4, all checks ok; Turnip passes GPU 0.09 ms sysmem vs 2.06 ms gmem) + build
+changes (glslang-tools, stage libdlbench.so) + README. CI 41424524869 (headSha d62271c) success, all
+steps; skipped = cached CTS/catalog + release only. APK has lib/arm64-v8a/libdlbench.so (68 KB) +
+assets/mesa/expect.tsv. CI-built libdlbench.so run alone on the Pocket FIT as the Termux uid (system
+driver, 1 s per scene, preview): all 9 scenes, checks ok/none, exit 0, preview 230,408 bytes; temp dir removed.
+
+**Staged:** /sdcard/Download/DriverLab-speed-and-repeat-d62271ce.apk (+ .sha256), sha256
+15438edb534dd9c4d5e460b23f0a426a37889d3d74e0820bab0f38b46c49b568 == CI .sha256 == host == device.
+NOT installed (needs the user's yes). Proof level: CI-green + benchmark program device-run in a
+terminal; app UI NOT device-tested.
+
+**Resume point:** ask the user to install on the Pocket FIT; device test plan: speed test system vs
+Turnip r4 (preview, verdicts, report), Quick check ×3 on Turnip (sometimes-fails + Mesa a750 labels),
+GPU error check (Magisk root prompt for com.driverlab — user's call), driver copy TU_DEBUG=gmem +
+"then also run on" + Compare. Announce takeover to peers, check topResumedActivity, Termux back.
 
 ## 2026-11-01 — test leftovers cleaned up on the Pocket FIT (user picked the scope)
 
