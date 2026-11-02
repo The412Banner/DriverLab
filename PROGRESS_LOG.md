@@ -51,7 +51,13 @@ blue, progress track dark (not teal), speed tiles "Last speed test A 1 / B 5" + 
 button blue, Tests run bar above the system buttons (152 tests · Quick check · Run). Left: the Recent list says
 "1 rounds" (not fixed there yet). Settings restored (cmp), crash buffer 0, FATAL/ANR 0, Termux back.
 Proof: 3e5a1b0 device-checked on the Pocket FIT; branch head = this log commit.
-**Resume point:** merge = user's go (backup ref first; tree must equal 3e5a1b0 + log). Device test was: dashboard upright + sideways
+**User: "fix it first then merge"** → 476db3f Fmt.plural ("1 round", "1 scene") in dashboard chip + Recent, speed screens,
+report. CI 41449720616 (headSha 476db3f) success; STAGED /sdcard/Download/DriverLab-dashboard-476db3fe.apk (sha256
+6331c0e3…, CI == device); older staged 3e5a1b04 removed.
+**User then: "after you fix it and verify its built green and fixed merge it to the main branch and release a new
+stable".** Plan: install 476db3fe (needs the user's yes — install rule) → check the wording → backup ref → ff main →
+release cut 0.2.0 (versionCode 4) + release-notes/v0.2.0.md (draft in scratchpad) → release workflow → verify.
+**Resume point:** waiting for install yes. Device test was: dashboard upright + sideways
 (rotate), conformance Start/Stop + live tiles, speed test live picture/frame time/score, header icons, back arrows.
 
 ## 2026-11-02 — MERGED feat/speed-and-repeat into main (user: "merge it")
