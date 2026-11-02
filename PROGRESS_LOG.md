@@ -17,7 +17,17 @@ HTML preview (Download/DriverLab-layout-options.html; canvas https://claude.ai/a
 3. dlbench prints a frame-time sample a few times a second ("DLBENCH tick") for the live line.
 4. Other screens restyled with the new theme.
 
-**Resume point:** branch created, nothing built.
+**Built:** 12ce30d (dashboard HomeScreen upright + wide, theme, outlines/BtnShape sweep, back arrows on Tests/Results/
+Files/Drivers, bottom bar removed, Results gets Speed + Files icons, settings homeMode/speed*/dynamicColor2, SpeedManager
+Live ft/aId/bId from "DLBENCH tick", README) — CI 41444350879 FAILED: "Argument already passed" (my sweep added
+shape = BtnShape to buttons that already had a shape) → 957643f fix → CI 41444676198 (headSha 957643f) success.
+APK has libdlbench.so 76,720 B + 4 font files (res/*.ttf, R8 names) + licenses/JetBrainsMono-OFL.txt. CI dlbench run
+alone on the Pocket FIT: 20 tick lines in 2 s of scenes, results ok.
+**Staged:** /sdcard/Download/DriverLab-dashboard-957643f0.apk, sha256 == CI == device. NOT installed (ask the user).
+Proof level: CI-green; dashboard UI NOT device-tested.
+
+**Resume point:** ask the user to install 957643f0 on the Pocket FIT; device test: dashboard upright + sideways
+(rotate), conformance Start/Stop + live tiles, speed test live picture/frame time/score, header icons, back arrows.
 
 ## 2026-11-02 — MERGED feat/speed-and-repeat into main (user: "merge it")
 
