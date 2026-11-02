@@ -42,7 +42,10 @@ driver, 1 s per scene, preview): all 9 scenes, checks ok/none, exit 0, preview 2
 NOT installed (needs the user's yes). Proof level: CI-green + benchmark program device-run in a
 terminal; app UI NOT device-tested.
 
-**Resume point:** ask the user to install on the Pocket FIT; device test plan: speed test system vs
+**User 2026-11-02: "yes install it and test, you tap grant"** (Magisk root prompt for com.driverlab: I tap Grant).
+Settings before the test (to restore, check shared_prefs): driverId=system, record=true, jobs=1.
+
+**Resume point:** installing d62271ce on the Pocket FIT + device test; plan: speed test system vs
 Turnip r4 (preview, verdicts, report), Quick check ×3 on Turnip (sometimes-fails + Mesa a750 labels),
 GPU error check (Magisk root prompt for com.driverlab — user's call), driver copy TU_DEBUG=gmem +
 "then also run on" + Compare. Announce takeover to peers, check topResumedActivity, Termux back.
