@@ -2,6 +2,27 @@
 
 Newest first.
 
+## 2026-11-02 — repeat runs, GPU error check, Mesa known failures, driver copies, speed test (feat/speed-and-repeat, IN PROGRESS)
+
+**Why:** user (2026-11-02): "do 1-4 and the speed test" from the offered list — (1) run tests
+several times and flag ones that only sometimes fail, (2) one driver with two settings without
+importing it twice, (3) GPU errors from the kernel log per test (root), (4) mark failures Mesa
+already knows (Mesa CI fails/flakes lists), (5) a speed test: same small Vulkan scenes on two
+drivers, alternating rounds, plain verdict only when the gap is bigger than the noise.
+Motivation: the Adreno 722 GMEM bug showed in 1–3 of 5 runs only, and faulted on passing tests.
+
+**Plan:** branch off main 1c6c607f, worktree /root/src/DriverLab-wt/speed.
+- native/dlbench: own headless Vulkan benchmark program (libdlbench.so), loads the system
+  loader or libdlvkshim.so; scenes fill, texture, geometry, draws, compute, bandwidth,
+  passes, pipelines; machine-readable "DLBENCH ..." lines; picture checks.
+- app: repeat count (rounds) + "sometimes fails" summary; driver copies (hard link, own name
+  and settings) + optional second driver run with Compare; root GPU-error watcher (dmesg -w);
+  Mesa expectations assets (tools/make_mesa_expect.py, pinned Mesa commit); Speed test screen
+  and runner in the foreground service.
+- CI build → test the native program in a terminal on the Pocket FIT → stage APK → ASK before install.
+
+**Resume point:** branch feat/speed-and-repeat on origin; nothing built yet.
+
 ## 2026-11-01 — test leftovers cleaned up on the Pocket FIT (user picked the scope)
 
 Removed from the app: test drivers (two "Pocket FIT own Qualcomm driver (test)" copies,
