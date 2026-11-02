@@ -436,7 +436,8 @@ class SpeedManager(private val context: Context, private val drivers: DriverRepo
             val names = listOf("A", "B")
             sb.append("DriverLab speed test\n")
             sb.append("Date:      ${Fmt.dateTime(r.startedAt)} (${r.state})\n")
-            sb.append("Device:    ${Build.MANUFACTURER} ${Build.MODEL} (Android ${Build.VERSION.RELEASE}${if (Build.VERSION.SDK_INT >= 31) ", " + Build.SOC_MODEL else ""})\n")
+            val soc = if (Build.VERSION.SDK_INT >= 31) Build.SOC_MODEL.takeUnless { it.isBlank() || it.equals(Build.UNKNOWN, true) } else null
+            sb.append("Device:    ${Build.MANUFACTURER} ${Build.MODEL} (Android ${Build.VERSION.RELEASE}${soc?.let { ", $it" } ?: ""})\n")
             r.drivers.forEachIndexed { i, d ->
                 sb.append("${names[i]}:         ${d.name}${if (d.version.isNotEmpty()) " — " + d.version else ""}${if (d.gpu.isNotEmpty()) " — " + d.gpu else ""}\n")
                 if (d.env.isNotBlank()) sb.append("           settings: ${d.env.lines().filter { it.isNotBlank() }.joinToString("  ")}\n")

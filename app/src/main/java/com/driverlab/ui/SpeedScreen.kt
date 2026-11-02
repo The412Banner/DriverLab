@@ -357,7 +357,7 @@ fun SpeedResultScreen(nav: NavHostController, id: String) {
         val letters = listOf("A", "B")
         LazyColumn(Modifier.fillMaxSize().padding(pad), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item {
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
+                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
                     Column(Modifier.padding(16.dp)) {
                         r.drivers.forEachIndexed { i, d ->
                             Text("${letters[i]}  ${d.name}", style = MaterialTheme.typography.titleSmall)
@@ -377,7 +377,7 @@ fun SpeedResultScreen(nav: NavHostController, id: String) {
             }
             items(rows, key = { it.scene }) { row ->
                 val scene = SpeedScenes.byId(row.scene)
-                Card(colors = CardDefaults.cardColors(containerColor = if (row.clear) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh)) {
+                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = if (row.clear) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh)) {
                     Column(Modifier.padding(14.dp)) {
                         Text(scene?.title ?: row.scene, style = MaterialTheme.typography.titleSmall)
                         Spacer(Modifier.height(4.dp))

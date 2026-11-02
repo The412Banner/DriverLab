@@ -52,6 +52,8 @@ class GpuErrorWatcher(private val onLine: (String) -> Unit) {
         val first = firstLine.get()?.trim().orEmpty()
         return when {
             first.isEmpty() -> "Root was not granted (no answer from su)"
+            first.contains("Permission denied", ignoreCase = true) || first.contains("not allowed", ignoreCase = true) ->
+                "Root was refused. Allow DriverLab in your root app (in Magisk: Superuser) and run again"
             else -> "Could not read the kernel log: ${first.take(160)}"
         }
     }
