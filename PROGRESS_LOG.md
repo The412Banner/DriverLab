@@ -26,7 +26,9 @@ alone on the Pocket FIT: 20 tick lines in 2 s of scenes, results ok.
 **Staged:** /sdcard/Download/DriverLab-dashboard-957643f0.apk, sha256 == CI == device. NOT installed (ask the user).
 Proof level: CI-green; dashboard UI NOT device-tested.
 
-**Resume point:** ask the user to install 957643f0 on the Pocket FIT; device test: dashboard upright + sideways
+**User 2026-11-02: "install it"** → installing 957643f0 on the Pocket FIT + quick test. Settings backup
+/data/local/tmp/driverlab-settings.xml.bak-dash; screen rotation settings noted before forcing sideways (restore after).
+**Resume point:** device test: dashboard upright + sideways
 (rotate), conformance Start/Stop + live tiles, speed test live picture/frame time/score, header icons, back arrows.
 
 ## 2026-11-02 — MERGED feat/speed-and-repeat into main (user: "merge it")
