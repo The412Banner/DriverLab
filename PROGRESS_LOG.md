@@ -2,6 +2,23 @@
 
 Newest first.
 
+## 2026-11-02 — dashboard UI (Option B, upright + sideways, blue accent) (feat/dashboard-ui, IN PROGRESS)
+
+**Why:** user asked for compact, more professional tabs/menus, sharper outlines, live graphs; picked from the
+HTML preview (Download/DriverLab-layout-options.html; canvas https://claude.ai/artifact/1ovmKhZoBZEYAUgXiGV6LW):
+"B for both, blue accent" — the one-screen dashboard upright AND its sideways version.
+
+**Plan:** branch off main de9366dd, worktree /root/src/DriverLab-wt/dash.
+1. Theme: dark-first, blue accent #4C8DFF, 4–6 dp corners, 1 dp outlines, JetBrains Mono (OFL, bundled) for numbers.
+2. Home = dashboard: driver A vs B cards, Conformance/Speed switch, test set chips, one Start button, four live tiles
+   (pass ring, tests/s line, repeat, GPU health; speed: live picture, frame-time line, score), recent runs.
+   Sideways (wide window): left column setup + Start + recent, right 2x2 tiles. No bottom tabs: Tests, Results,
+   Drivers, Settings from header icons; Files reached from results.
+3. dlbench prints a frame-time sample a few times a second ("DLBENCH tick") for the live line.
+4. Other screens restyled with the new theme.
+
+**Resume point:** branch created, nothing built.
+
 ## 2026-11-02 — MERGED feat/speed-and-repeat into main (user: "merge it")
 
 Backup ref refs/backup/20261102/main-before-speed-and-repeat = 1c6c607f01a06c9e3b5a17038dd7acc095fb48ca (pushed +
