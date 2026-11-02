@@ -2,6 +2,17 @@
 
 Newest first.
 
+## 2026-11-02 — MERGED feat/speed-and-repeat into main (user: "merge it")
+
+Backup ref refs/backup/20261102/main-before-speed-and-repeat = 1c6c607f01a06c9e3b5a17038dd7acc095fb48ca (pushed +
+verified first). main fast-forwarded 1c6c607 → 2b8db843227f3c9be9f14c55250bbc761b09bde7; tree == device-tested
+73bc0409 build except PROGRESS_LOG.md (git diff 73bc040 main, log excluded: empty). Contents: repeat runs +
+"sometimes fails", GPU error check (root via Magisk Superuser), Mesa known results, driver copies, second-driver
+run + Compare, speed test (10 scenes, alternating rounds, live picture, full screen, test card picture check,
+report + pictures in Downloads). CI on the tested commit: 41431006975 green. No version bump (no release asked);
+v0.1.2 stays Latest. Branch kept (not deleted).
+Not tested: the red "differs" path and "sometimes fails" (no real case on the Pocket FIT); the Duo / A722.
+
 ## 2026-11-02 — solid pictures + picture check for the speed test (feat/speed-and-repeat, IN PROGRESS)
 
 **Why:** user watched the speed test: scenes looked "garbled" (texture = noise, draws/passes = tiny dots by design;
