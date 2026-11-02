@@ -30,7 +30,8 @@ vs ~106 with noise (compressible, cache-friendly) — lighter test now, as warne
 **Staged:** /sdcard/Download/DriverLab-test-card-73bc0409.apk sha256 1c124691…4b40 == CI == device. Old staged
 d62271ce APK removed from Download (that build is still installed). NOT installed — ask the user (away at work).
 
-**Resume point:** ask the user to install 73bc0409 on the Pocket FIT and run: speed test with card (A system, B Turnip
+**User 2026-11-02: "yes install it and test".** Settings backup → /data/local/tmp/driverlab-settings.xml.bak-20261102b.
+**Resume point:** installing 73bc0409 on the Pocket FIT and running: speed test with card (A system, B Turnip
 r4) → picture check card matches, tap-to-full-screen, sheet PNG in Downloads; optional fake-difference check.
 
 ## 2026-11-02 — repeat runs, GPU error check, Mesa known failures, driver copies, speed test (feat/speed-and-repeat, IN PROGRESS)
