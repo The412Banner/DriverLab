@@ -88,10 +88,10 @@ static struct {
     VkBuffer staging, readback;
     VkDeviceMemory staging_mem, readback_mem;
     uint8_t *staging_map, *readback_map;
-    const char *preview_path;
-    uint32_t preview_w, preview_h;
-    VkImage preview;
-    VkDeviceMemory preview_mem;
+    const char *preview_path, *snapshot_path;
+    uint32_t preview_w, preview_h, snapshot_w, snapshot_h;
+    VkImage preview, snapshot;
+    VkDeviceMemory preview_mem, snapshot_mem;
     double seconds, warmup;
     int lost;
     double *times;
@@ -377,8 +377,8 @@ static VkResult read_buffer(VkBuffer src, const VkDeviceSize *offsets, uint32_t 
     return end_submit(g.util_cb);
 }
 
-/* Shrinks the color image into the preview file: uint32 LE width, height, then RGBA8 rows. */
-static VkResult write_preview(void)
+/* Shrinks the color image into a file: uint32 LE width, height, then RGBA8 rows. */
+static VkResult write_scaled(VkImage dst, uint32_t w, uint32_t h, const char *path, int *written)
 {
     VkResult r = begin(g.util_cb, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
     if (r) return r;
@@ -386,7 +386,7 @@ static VkResult write_preview(void)
     image_barrier(cb, g.color, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                   VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
                   VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT);
-    image_barrier(cb, g.preview, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+    image_barrier(cb, dst, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                   VK_PIPELINE_STAGE_TRANSFER_BIT, 0, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
     VkImageBlit b = { 0 };
     b.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -395,21 +395,21 @@ static VkResult write_preview(void)
     b.srcOffsets[1].y = (int32_t)g.height;
     b.srcOffsets[1].z = 1;
     b.dstSubresource = b.srcSubresource;
-    b.dstOffsets[1].x = (int32_t)g.preview_w;
-    b.dstOffsets[1].y = (int32_t)g.preview_h;
+    b.dstOffsets[1].x = (int32_t)w;
+    b.dstOffsets[1].y = (int32_t)h;
     b.dstOffsets[1].z = 1;
-    vkCmdBlitImage(cb, g.color, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, g.preview, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+    vkCmdBlitImage(cb, g.color, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                    1, &b, VK_FILTER_LINEAR);
-    image_barrier(cb, g.preview, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+    image_barrier(cb, dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                   VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
                   VK_ACCESS_TRANSFER_READ_BIT);
     VkBufferImageCopy c = { 0 };
     c.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     c.imageSubresource.layerCount = 1;
-    c.imageExtent.width = g.preview_w;
-    c.imageExtent.height = g.preview_h;
+    c.imageExtent.width = w;
+    c.imageExtent.height = h;
     c.imageExtent.depth = 1;
-    vkCmdCopyImageToBuffer(cb, g.preview, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, g.readback, 1, &c);
+    vkCmdCopyImageToBuffer(cb, dst, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, g.readback, 1, &c);
     image_barrier(cb, g.color, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                   VK_PIPELINE_STAGE_TRANSFER_BIT, 0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
                   VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
@@ -418,17 +418,24 @@ static VkResult write_preview(void)
     if ((r = end_submit(cb))) return r;
 
     char tmp[4096];
-    snprintf(tmp, sizeof(tmp), "%s.tmp", g.preview_path);
+    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+    if (written) *written = 0;
     FILE *f = fopen(tmp, "wb");
     if (!f) return VK_SUCCESS;
-    uint32_t hdr[2] = { g.preview_w, g.preview_h };
-    size_t bytes = (size_t)g.preview_w * g.preview_h * 4;
+    uint32_t hdr[2] = { w, h };
+    size_t bytes = (size_t)w * h * 4;
     int ok = fwrite(hdr, sizeof(hdr), 1, f) == 1 && fwrite(g.readback_map, bytes, 1, f) == 1;
-    if (fclose(f) == 0 && ok)
-        rename(tmp, g.preview_path);
-    else
+    if (fclose(f) == 0 && ok && rename(tmp, path) == 0) {
+        if (written) *written = 1;
+    } else {
         unlink(tmp);
+    }
     return VK_SUCCESS;
+}
+
+static VkResult write_preview(void)
+{
+    return write_scaled(g.preview, g.preview_w, g.preview_h, g.preview_path, NULL);
 }
 
 /* ---- pipelines ---- */
@@ -447,7 +454,7 @@ struct gpipe {
     VkPipelineLayout layout;
     VkRenderPass rp;
     VkPrimitiveTopology topology;
-    int blend_add, depth, vertex_vec2;
+    int blend_add, blend_alpha, depth, vertex_vec2;
     const VkSpecializationInfo *fs_spec;
 };
 
@@ -508,6 +515,14 @@ static VkResult make_gpipe(const struct gpipe *d, VkPipeline *p)
         ba.colorBlendOp = VK_BLEND_OP_ADD;
         ba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
         ba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        ba.alphaBlendOp = VK_BLEND_OP_ADD;
+    } else if (d->blend_alpha) {
+        ba.blendEnable = VK_TRUE;
+        ba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+        ba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        ba.colorBlendOp = VK_BLEND_OP_ADD;
+        ba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        ba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
         ba.alphaBlendOp = VK_BLEND_OP_ADD;
     }
     VkPipelineColorBlendStateCreateInfo cbs = { .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
@@ -792,19 +807,40 @@ static int near_color(const uint8_t a[4], const uint8_t b[4], int tol)
 #define TEX_BIG 2048
 #define TEX_CUBE 256
 
-static void gen_noise(uint8_t *dst, VkDeviceSize off, VkDeviceSize n, const void *ctx)
+/* The texture scene's picture: a 256x256 tile repeated 8 x 8. The tile is 4 x 4
+ * blocks of 64 texels in flat colours (multiples of 8, so eight 1/8 adds give
+ * the exact colour back), a 4-texel dark grid, and a diagonal gradient in the
+ * last block. */
+#define TILE 256
+static const uint8_t tile_colors[16][3] = {
+    { 240, 64, 64 },   { 64, 200, 64 },  { 64, 96, 240 },   { 240, 216, 64 },
+    { 200, 64, 200 },  { 64, 216, 216 }, { 248, 136, 0 },   { 128, 128, 128 },
+    { 248, 248, 248 }, { 96, 48, 16 },   { 160, 200, 240 }, { 0, 128, 96 },
+    { 200, 160, 120 }, { 128, 0, 64 },   { 176, 240, 128 }, { 0, 0, 0 },
+};
+
+static void tile_texel(uint32_t x, uint32_t y, uint8_t out[4])
 {
-    for (VkDeviceSize i = 0; i < n; i += 4) {
-        uint32_t texel = (uint32_t)((off + i) / 4);
-        uint32_t h = hash32(texel + 0x1234567u);
-        memcpy(dst + i, &h, 4);
+    uint32_t tx = x % TILE, ty = y % TILE, bx = tx / 64, by = ty / 64, lx = tx % 64, ly = ty % 64;
+    out[3] = 255;
+    if (lx < 4 || ly < 4) {
+        out[0] = out[1] = out[2] = 24;
+    } else if (bx == 3 && by == 3) {
+        uint32_t v = (lx + ly) * 2;
+        out[0] = (uint8_t)v;
+        out[1] = (uint8_t)(255 - v);
+        out[2] = 128;
+    } else {
+        memcpy(out, tile_colors[by * 4 + bx], 3);
     }
 }
 
-static uint8_t noise_at(uint32_t x, uint32_t y, int c)
+static void gen_tile(uint8_t *dst, VkDeviceSize off, VkDeviceSize n, const void *ctx)
 {
-    uint32_t h = hash32(y * TEX_BIG + x + 0x1234567u);
-    return (uint8_t)(h >> (8 * c));
+    for (VkDeviceSize i = 0; i < n; i += 4) {
+        uint32_t texel = (uint32_t)((off + i) / 4);
+        tile_texel(texel % TEX_BIG, texel / TEX_BIG, dst + i);
+    }
 }
 
 static void gen_checker(uint8_t *dst, VkDeviceSize off, VkDeviceSize n, const void *ctx)
@@ -902,6 +938,116 @@ out:
     return rc;
 }
 
+/* card: a test card (colour bars, ramps, checkerboard, rings), 5 spinning
+ * textured cubes and a half-transparent grey panel over the ramps. */
+#define CARD_CUBES 5
+
+struct card_ctx {
+    VkPipeline bg, cube, panel;
+    VkDescriptorSet set;
+};
+
+static void card_record(VkCommandBuffer cb, double t, void *p)
+{
+    struct card_ctx *c = p;
+    static const float black[4] = { 0, 0, 0, 1 };
+    struct pc48 bg = { { 0 }, { 1, 1, 0, 0 }, { (float)g.width, (float)g.height, 0, 0 } };
+    struct pc48 panel = { { 0.5f, 0.5f, 0.5f, 0.5f }, { 0 }, { 0.1f, -0.36f, 0.9f, -0.04f } };
+    float proj[16], view[16] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, -9, 1 }, pv[16];
+    perspective(proj, 1.0472f, (float)g.width / (float)g.height, 0.1f, 100.0f);
+    mat_mul(pv, proj, view);
+    begin_pass(cb, g.rp_cd, g.fb_cd, black);
+    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, c->bg);
+    push(cb, g.pl_plain, &bg, sizeof(bg));
+    vkCmdDraw(cb, 3, 1, 0, 0);
+    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, c->cube);
+    vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, g.pl_tex, 0, 1, &c->set, 0, NULL);
+    for (int i = 0; i < CARD_CUBES; i++) {
+        /* Shifted after projection, so each cube sits at a fixed screen spot (row at 79 % height). */
+        float shift[16] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.8f + 0.4f * (float)i, 0.58f, 0, 1 };
+        float model[16], spv[16], m[32];
+        rotation(model, (float)t * (1.0f + 0.15f * (float)i) + (float)i, (float)t * 0.7f + 0.5f * (float)i);
+        mat_mul(spv, shift, pv);
+        mat_mul(m, spv, model);
+        memcpy(m + 16, model, sizeof(model));
+        push(cb, g.pl_tex, m, 128);
+        vkCmdDraw(cb, 36, 1, 0, 0);
+    }
+    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, c->panel);
+    push(cb, g.pl_plain, &panel, sizeof(panel));
+    vkCmdDraw(cb, 4, 1, 0, 0);
+    vkCmdEndRenderPass(cb);
+}
+
+static int scene_card(const char *name)
+{
+    int rc = 0;
+    struct texture tex = { 0 };
+    struct card_ctx c = { 0 };
+    struct stats st;
+    CK(make_texture(TEX_CUBE, gen_checker, &tex), "uploading the texture");
+    CK(alloc_set(g.dsl_tex, &c.set), "allocating a descriptor set");
+    set_texture(c.set, tex.view);
+    struct gpipe d = { 0 };
+    d.vs = spv_fullscreen_vert; d.vs_size = sizeof(spv_fullscreen_vert);
+    d.fs = spv_card_frag; d.fs_size = sizeof(spv_card_frag);
+    d.layout = g.pl_plain;
+    d.rp = g.rp_cd;
+    d.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    CK(make_gpipe(&d, &c.bg), "creating the background pipeline");
+    d.vs = spv_cube_vert; d.vs_size = sizeof(spv_cube_vert);
+    d.fs = spv_cube_frag; d.fs_size = sizeof(spv_cube_frag);
+    d.layout = g.pl_tex;
+    d.depth = 1;
+    CK(make_gpipe(&d, &c.cube), "creating the cube pipeline");
+    d.vs = spv_rect_vert; d.vs_size = sizeof(spv_rect_vert);
+    d.fs = spv_color_frag; d.fs_size = sizeof(spv_color_frag);
+    d.layout = g.pl_plain;
+    d.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+    d.depth = 0;
+    d.blend_alpha = 1;
+    CK(make_gpipe(&d, &c.panel), "creating the panel pipeline");
+    struct loop L = { name, card_record, &c, 1, 1 };
+    if ((rc = run_loop(&L, &st))) goto out;
+
+    /* One more frame at t = 1 s (not timed): the same picture on every driver. */
+    CK(record_frame(&L, 1.0), "recording the snapshot frame");
+    CK(submit_wait(g.frame_cb), "rendering the snapshot frame");
+    if (g.snapshot_path) {
+        int written = 0;
+        CK(write_scaled(g.snapshot, g.snapshot_w, g.snapshot_h, g.snapshot_path, &written), "making the snapshot");
+        if (written)
+            printf("DLBENCH snapshot scene=card path=%s w=%u h=%u\n", enc(g.snapshot_path), g.snapshot_w, g.snapshot_h);
+        else
+            printf("DLBENCH error scene=card msg=could not write the snapshot file %s\n", g.snapshot_path);
+    }
+    if (g.preview_path)
+        CK(write_preview(), "making the preview");
+
+    /* Flat pixels no cube covers: white, cyan and red bars, one checkerboard square. */
+    const char *check = "ok";
+    uint32_t y = (uint32_t)(0.15 * g.height);
+    static const int bars[3] = { 0, 2, 5 };
+    static const uint8_t want[3][4] = { { 255, 255, 255, 255 }, { 0, 255, 255, 255 }, { 255, 0, 0, 255 } };
+    uint8_t px[4];
+    for (int i = 0; i < 3; i++) {
+        CK(read_pixel((uint32_t)(g.width * (bars[i] + 0.5) / 8), y, px), "reading the picture");
+        if (!near_color(px, want[i], 0)) check = "differs";
+    }
+    uint32_t cx = g.width / 2 + 8, cy = (uint32_t)(0.54 * g.height);
+    uint8_t v = (((cx / 16) + (cy / 16)) & 1) ? 255 : 0, board[4] = { v, v, v, 255 };
+    CK(read_pixel(cx, cy, px), "reading the picture");
+    if (!near_color(px, board, 0)) check = "differs";
+    print_frame_result(name, &st, check);
+out:
+    scene_done();
+    vkDestroyPipeline(g.device, c.bg, NULL);
+    vkDestroyPipeline(g.device, c.cube, NULL);
+    vkDestroyPipeline(g.device, c.panel, NULL);
+    free_texture(&tex);
+    return rc;
+}
+
 /* fill: 16 full-screen quads added on top of each other. */
 #define FILL_LAYERS 16
 struct simple_ctx {
@@ -948,14 +1094,9 @@ out:
     return rc;
 }
 
-/* texture: 8 full-screen quads sampling a 2048x2048 noise texture, each weighted 1/8. */
+/* texture: 8 full-screen quads sampling the 2048x2048 tiled picture, each
+ * weighted 1/8 and shifted by whole tiles, so the sum is the tile pattern. */
 #define TEX_LAYERS 8
-
-static void tex_layer(int i, float *scale, float *offset)
-{
-    *scale = 1.0f + 0.25f * (float)i;
-    *offset = 0.37f * (float)i;
-}
 
 static void texture_record(VkCommandBuffer cb, double t, void *p)
 {
@@ -965,35 +1106,11 @@ static void texture_record(VkCommandBuffer cb, double t, void *p)
     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, c->pipe);
     vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, g.pl_tex, 0, 1, &c->set, 0, NULL);
     for (int i = 0; i < TEX_LAYERS; i++) {
-        float s, o;
-        tex_layer(i, &s, &o);
-        struct pc48 pc = { { 0.125f, 0.125f, 0.125f, 0.125f }, { s, s, o, o * 0.5f }, { 0 } };
+        struct pc48 pc = { { 0.125f, 0.125f, 0.125f, 0.125f }, { 1, 1, (float)(i * TILE) / TEX_BIG, 0 }, { 0 } };
         push(cb, g.pl_tex, &pc, sizeof(pc));
         vkCmdDraw(cb, 3, 1, 0, 0);
     }
     vkCmdEndRenderPass(cb);
-}
-
-/* What the center pixel should be: bilinear, repeat, then 8-bit adds. */
-static void texture_expected(uint8_t out[4])
-{
-    double u0 = (g.width / 2 + 0.5) / g.width, v0 = (g.height / 2 + 0.5) / g.height;
-    double acc[4] = { 0, 0, 0, 0 };
-    for (int i = 0; i < TEX_LAYERS; i++) {
-        float s, o;
-        tex_layer(i, &s, &o);
-        double tx = (u0 * s + o) * TEX_BIG - 0.5, ty = (v0 * s + o * 0.5) * TEX_BIG - 0.5;
-        double fx = floor(tx), fy = floor(ty), ax = tx - fx, ay = ty - fy;
-        uint32_t x0 = (uint32_t)(((long)fx % TEX_BIG + TEX_BIG) % TEX_BIG), x1 = (x0 + 1) % TEX_BIG;
-        uint32_t y0 = (uint32_t)(((long)fy % TEX_BIG + TEX_BIG) % TEX_BIG), y1 = (y0 + 1) % TEX_BIG;
-        for (int ch = 0; ch < 4; ch++) {
-            double v = (1 - ax) * (1 - ay) * noise_at(x0, y0, ch) + ax * (1 - ay) * noise_at(x1, y0, ch) +
-                       (1 - ax) * ay * noise_at(x0, y1, ch) + ax * ay * noise_at(x1, y1, ch);
-            acc[ch] = floor(acc[ch] + v * 0.125 + 0.5);
-            if (acc[ch] > 255) acc[ch] = 255;
-        }
-    }
-    for (int ch = 0; ch < 4; ch++) out[ch] = (uint8_t)acc[ch];
 }
 
 static int scene_texture(const char *name)
@@ -1002,7 +1119,7 @@ static int scene_texture(const char *name)
     struct texture tex = { 0 };
     struct simple_ctx c = { 0 };
     struct stats st;
-    CK(make_texture(TEX_BIG, gen_noise, &tex), "uploading the texture");
+    CK(make_texture(TEX_BIG, gen_tile, &tex), "uploading the texture");
     CK(alloc_set(g.dsl_tex, &c.set), "allocating a descriptor set");
     set_texture(c.set, tex.view);
     struct gpipe d = { 0 };
@@ -1015,10 +1132,11 @@ static int scene_texture(const char *name)
     CK(make_gpipe(&d, &c.pipe), "creating the pipeline");
     struct loop L = { name, texture_record, &c, 0, 1 };
     if ((rc = run_loop(&L, &st))) goto out;
+    /* The screen pixel over texel (96, 96): the middle of block (1, 1). */
     uint8_t px[4], want[4];
-    CK(read_pixel(g.width / 2, g.height / 2, px), "reading the picture");
-    texture_expected(want);
-    print_frame_result(name, &st, near_color(px, want, 8) ? "ok" : "differs");
+    CK(read_pixel((uint32_t)(96.0 * g.width / TEX_BIG), (uint32_t)(96.0 * g.height / TEX_BIG), px), "reading the picture");
+    tile_texel(96, 96, want);
+    print_frame_result(name, &st, near_color(px, want, 2) ? "ok" : "differs");
 out:
     scene_done();
     vkDestroyPipeline(g.device, c.pipe, NULL);
@@ -1113,8 +1231,18 @@ out:
     return rc;
 }
 
-/* draws: 20000 tiny rectangles, one draw call each, recorded every frame. */
-#define DRAWS 20000
+/* draws: 20000 rectangles (200 x 100 cells, edge to edge), one draw call each,
+ * recorded every frame. Colour is a fixed gradient by column and row. */
+#define DRAW_COLS 200
+#define DRAW_ROWS 100
+
+static void draw_cell(int col, int row, struct pc48 *pc)
+{
+    float x = -1.0f + (float)col * (2.0f / DRAW_COLS), y = -1.0f + (float)row * (2.0f / DRAW_ROWS);
+    struct pc48 v = { { (float)col / (DRAW_COLS - 1), (float)row / (DRAW_ROWS - 1), 0.5f, 1.0f },
+                      { 0 }, { x, y, x + 2.0f / DRAW_COLS, y + 2.0f / DRAW_ROWS } };
+    *pc = v;
+}
 
 static void draws_record(VkCommandBuffer cb, double t, void *p)
 {
@@ -1122,15 +1250,13 @@ static void draws_record(VkCommandBuffer cb, double t, void *p)
     static const float black[4] = { 0, 0, 0, 1 };
     begin_pass(cb, g.rp_c_clear, g.fb_c, black);
     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, c->pipe);
-    float phase = (float)t;
-    for (int i = 0; i < DRAWS; i++) {
-        float x = -1.0f + (float)(i % 200) * 0.01f, y = -1.0f + (float)(i / 200) * 0.02f;
-        struct pc48 pc = { { 0.5f + 0.5f * sinf(phase + (float)i * 0.01f), (float)(i % 200) / 200.0f,
-                             (float)(i / 200) / 100.0f, 1.0f },
-                           { 0 }, { x, y, x + 0.006f, y + 0.012f } };
-        push(cb, g.pl_plain, &pc, sizeof(pc));
-        vkCmdDraw(cb, 4, 1, 0, 0);
-    }
+    for (int row = 0; row < DRAW_ROWS; row++)
+        for (int col = 0; col < DRAW_COLS; col++) {
+            struct pc48 pc;
+            draw_cell(col, row, &pc);
+            push(cb, g.pl_plain, &pc, sizeof(pc));
+            vkCmdDraw(cb, 4, 1, 0, 0);
+        }
     vkCmdEndRenderPass(cb);
 }
 
@@ -1148,7 +1274,13 @@ static int scene_draws(const char *name)
     CK(make_gpipe(&d, &c.pipe), "creating the pipeline");
     struct loop L = { name, draws_record, &c, 1, 1 };
     if ((rc = run_loop(&L, &st))) goto out;
-    print_frame_result(name, &st, "none");
+    /* The middle pixel of cell (100, 50). */
+    uint8_t px[4], want[4];
+    struct pc48 cell;
+    draw_cell(100, 50, &cell);
+    for (int i = 0; i < 4; i++) want[i] = (uint8_t)lrintf(cell.color[i] * 255.0f);
+    CK(read_pixel((uint32_t)(100.5 * g.width / DRAW_COLS), (uint32_t)(50.5 * g.height / DRAW_ROWS), px), "reading the picture");
+    print_frame_result(name, &st, near_color(px, want, 1) ? "ok" : "differs");
 out:
     scene_done();
     vkDestroyPipeline(g.device, c.pipe, NULL);
@@ -1156,8 +1288,8 @@ out:
 }
 
 /* passes: a clear, then 8 render passes that each load and store the whole image.
- * Each pass draws 4x4-pixel squares spread over the image (48 x 27 grid), so
- * no screen tile is left out; the shading work stays tiny. */
+ * Each pass draws squares (70 % of a cell of a 48 x 27 grid) over the whole
+ * image, so no screen tile is left out, and adds 24/255 (8 passes: 192). */
 #define PASSES 8
 #define DOT_COLS 48
 #define DOT_ROWS 27
@@ -1166,8 +1298,8 @@ static void passes_record(VkCommandBuffer cb, double t, void *p)
 {
     struct simple_ctx *c = p;
     static const float black[4] = { 0, 0, 0, 0 };
-    float pc[8] = { 8 / 255.0f, 8 / 255.0f, 8 / 255.0f, 8 / 255.0f, DOT_COLS, DOT_ROWS,
-                    8.0f / (float)g.width, 8.0f / (float)g.height };
+    float pc[8] = { 24 / 255.0f, 24 / 255.0f, 24 / 255.0f, 24 / 255.0f, DOT_COLS, DOT_ROWS,
+                    0.7f * 2.0f / DOT_COLS, 0.7f * 2.0f / DOT_ROWS };
     begin_pass(cb, g.rp_c_clear, g.fb_c, black);
     vkCmdEndRenderPass(cb);
     for (int i = 0; i < PASSES; i++) {
@@ -1195,9 +1327,9 @@ static int scene_passes(const char *name)
     struct loop L = { name, passes_record, &c, 0, 1 };
     if ((rc = run_loop(&L, &st))) goto out;
     uint8_t px[4];
-    static const uint8_t want[4] = { 64, 64, 64, 64 };
-    /* A pixel inside the square of cell (24, 13). */
-    uint32_t x = (uint32_t)floor(24.5 * g.width / DOT_COLS) - 1, y = (uint32_t)floor(13.5 * g.height / DOT_ROWS) - 1;
+    static const uint8_t want[4] = { 192, 192, 192, 192 };
+    /* The middle of the square of cell (24, 13). */
+    uint32_t x = (uint32_t)floor(24.5 * g.width / DOT_COLS), y = (uint32_t)floor(13.5 * g.height / DOT_ROWS);
     CK(read_pixel(x, y, px), "reading the picture");
     print_frame_result(name, &st, near_color(px, want, 0) ? "ok" : "differs");
 out:
@@ -1397,6 +1529,7 @@ static const struct {
     const char *id;
     int (*run)(const char *);
 } scenes[] = {
+    { "card", scene_card },
     { "cube", scene_cube },         { "fill", scene_fill },         { "texture", scene_texture },
     { "geometry", scene_geometry }, { "draws", scene_draws },       { "passes", scene_passes },
     { "compute", scene_compute },   { "bandwidth", scene_bandwidth }, { "pipelines", scene_pipelines },
@@ -1570,6 +1703,8 @@ static VkResult init_shared(void)
     if ((r = make_buffer(STAGING_SIZE, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, host, &g.staging, &g.staging_mem, &g.staging_map)))
         return r;
     VkDeviceSize rb = (VkDeviceSize)g.preview_w * g.preview_h * 4;
+    if (g.snapshot_path && (VkDeviceSize)g.snapshot_w * g.snapshot_h * 4 > rb)
+        rb = (VkDeviceSize)g.snapshot_w * g.snapshot_h * 4;
     if (rb < 4096) rb = 4096;
     if ((r = make_buffer(rb, VK_BUFFER_USAGE_TRANSFER_DST_BIT, host | VK_MEMORY_PROPERTY_HOST_CACHED_BIT, &g.readback,
                          &g.readback_mem, &g.readback_map))) {
@@ -1581,6 +1716,10 @@ static VkResult init_shared(void)
     if (g.preview_path &&
         (r = make_image(g.preview_w, g.preview_h, VK_FORMAT_R8G8B8A8_UNORM,
                         VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, &g.preview, &g.preview_mem)))
+        return r;
+    if (g.snapshot_path &&
+        (r = make_image(g.snapshot_w, g.snapshot_h, VK_FORMAT_R8G8B8A8_UNORM,
+                        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, &g.snapshot, &g.snapshot_mem)))
         return r;
 
     // The color image stays in COLOR_ATTACHMENT_OPTIMAL between uses.
@@ -1658,7 +1797,8 @@ static int init_vulkan(const char *lib)
 static void usage(void)
 {
     fprintf(stderr, "usage: libdlbench.so [--vk-lib PATH] [--scenes id,id,...] [--seconds S] [--warmup S]\n"
-                    "                     [--width W --height H] [--preview PATH] [--preview-size WxH] [--list]\n");
+                    "                     [--width W --height H] [--preview PATH] [--preview-size WxH]\n"
+                    "                     [--snapshot PATH] [--snapshot-size WxH] [--list]\n");
 }
 
 int main(int argc, char **argv)
@@ -1671,6 +1811,8 @@ int main(int argc, char **argv)
     g.height = 1080;
     g.preview_w = 320;
     g.preview_h = 180;
+    g.snapshot_w = 960;
+    g.snapshot_h = 540;
     for (int i = 1; i < argc; i++)
         if (!strcmp(argv[i], "--list")) {
             for (int s = 0; s < SCENE_COUNT; s++) printf("DLBENCH scene id=%s\n", scenes[s].id);
@@ -1686,12 +1828,17 @@ int main(int argc, char **argv)
         else if (!strcmp(a, "--width")) g.width = (uint32_t)atoi(v);
         else if (!strcmp(a, "--height")) g.height = (uint32_t)atoi(v);
         else if (!strcmp(a, "--preview")) g.preview_path = v;
+        else if (!strcmp(a, "--snapshot")) g.snapshot_path = v;
+        else if (!strcmp(a, "--snapshot-size")) {
+            if (sscanf(v, "%ux%u", &g.snapshot_w, &g.snapshot_h) != 2) { usage(); return 2; }
+        }
         else if (!strcmp(a, "--preview-size")) {
             if (sscanf(v, "%ux%u", &g.preview_w, &g.preview_h) != 2) { usage(); return 2; }
         } else { usage(); return 2; }
     }
     if (g.width < 64 || g.height < 64 || g.width > 8192 || g.height > 8192 || g.preview_w < 8 || g.preview_h < 8 ||
-        g.preview_w > 2048 || g.preview_h > 2048 || g.seconds <= 0 || g.warmup < 0) {
+        g.preview_w > 2048 || g.preview_h > 2048 || g.snapshot_w < 8 || g.snapshot_h < 8 || g.snapshot_w > 4096 ||
+        g.snapshot_h > 4096 || g.seconds <= 0 || g.warmup < 0) {
         usage();
         return 2;
     }
