@@ -13,6 +13,9 @@ https://github.com/The412Banner/DriverLab/releases/tag/v0.2.0 — Latest, not pr
 DriverLab-v0.2.0-bc2c30f1.apk (41,766,789 B) + .sha256 (downloaded back: OK), aapt: versionCode 4 / versionName 0.2.0,
 notes == release-notes/v0.2.0.md. v0.2.0 contains both feature branches of 2026-11-02 (speed-and-repeat + dashboard-ui).
 Pocket FIT has 476db3fe installed (same code, old version numbers); release APK not installed anywhere.
+**08:25 local (user: "install the release on the pocket fit"):** staged Download/DriverLab-v0.2.0-bc2c30f1.apk (sha256
+dd6a5172… == release .sha256 == device), installed in the background while the user was in Discord (no screen use):
+base.apk sha256 dd6a5172… == release, versionCode 4, versionName 0.2.0; crash buffer 0. Old staged test APK removed.
 Open: Duo / A722 test (sometimes-fails, real GPU faults, picture-check red path); branches kept.
 
 ## 2026-11-02 — dashboard UI (Option B, upright + sideways, blue accent) (feat/dashboard-ui, IN PROGRESS)
