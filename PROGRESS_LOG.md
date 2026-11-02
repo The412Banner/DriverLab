@@ -57,7 +57,11 @@ report. CI 41449720616 (headSha 476db3f) success; STAGED /sdcard/Download/Driver
 **User then: "after you fix it and verify its built green and fixed merge it to the main branch and release a new
 stable".** Plan: install 476db3fe (needs the user's yes — install rule) → check the wording → backup ref → ff main →
 release cut 0.2.0 (versionCode 4) + release-notes/v0.2.0.md (draft in scratchpad) → release workflow → verify.
-**Resume point:** waiting for install yes. Device test was: dashboard upright + sideways
+**User: "yes install it"** → installed 476db3fe in the background while the user was in Gmail/Discord (hash 6331c0e3…
+== staged); user: "go ahead and take the screen" → DriverLab Recent list shows "07:46:39 · 6 scenes · 1 round" and
+"06:01:40 · 7 scenes · 3 rounds". Settings unchanged, crash buffer 0, Termux back, peer told + done.
+Proof: 476db3f device-checked on the Pocket FIT. Next: merge + release 0.2.0 (user's go).
+Device test was: dashboard upright + sideways
 (rotate), conformance Start/Stop + live tiles, speed test live picture/frame time/score, header icons, back arrows.
 
 ## 2026-11-02 — MERGED feat/speed-and-repeat into main (user: "merge it")
