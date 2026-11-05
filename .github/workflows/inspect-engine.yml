@@ -1,0 +1,45 @@
+name: Driver inspector engine
+
+# Builds rizin + rz-ghidra for Android arm64 (native/inspect/build-inspect.sh) as an artifact, so the
+# engine can be tried on a device before it goes into the app.
+
+on:
+  push:
+    branches: [feat/driver-inspector]
+    paths:
+      - "native/inspect/**"
+      - ".github/workflows/inspect-engine.yml"
+  workflow_dispatch:
+
+env:
+  NDK_VERSION: 29.0.14206865
+
+jobs:
+  engine:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ninja-build cmake pkg-config bison flex > /dev/null
+          pip3 install --break-system-packages -q meson
+
+      - name: Install NDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;${NDK_VERSION}" > /dev/null
+          echo "ANDROID_NDK_PATH=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Build engine
+        run: native/inspect/build-inspect.sh
+
+      - name: Pack
+        run: tar -C inspect-out -czf inspect-engine-android-arm64.tar.gz .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: inspect-engine
+          path: inspect-engine-android-arm64.tar.gz
+          retention-days: 14
