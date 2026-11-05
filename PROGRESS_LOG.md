@@ -46,7 +46,23 @@ files; tar.gz 14,158,624 B, sha256 a566c899… (host == device).
 - 100 functions spread over each file: +2 s (891) / +5 s (Turnip) after analysis → a whole driver is a few minutes.
 - Mesa match check: Turnip `fcn.009cc32c` = Mesa `_vk_device_set_lost` (src/vulkan/runtime/vk_device.c:431).
 
-**Open / next:** package the engine into the APK, Inspect screen, whole-driver source export, Mesa match, compare.
+**App (stage A + compare):** `core/Inspector.kt` (engine session over a pipe, overview, strings, functions,
+renames, notes, edits, whole-file source job with its own engine, zip, compare) and `ui/InspectScreens.kt`
+(Inspect screen with Overview / Functions / Text / Source, function view, compare screen); Code button on each
+driver card. Engine rebuilt for the app's folder (/data/user/0/com.driverlab/files/rz) and packed into the APK.
+- APK run 42093843632 (6401049c) failed: a KDoc said `source/functions/*.c`, and Kotlin opens a nested comment at
+  `/*` inside a comment, so the rest of the file was a comment. Fixed wording; the engine cache is now saved right
+  after the engine builds (actions/cache/save), not at the end of the job.
+- **APK run 42095389807 (511e1907) green.** APK 56,678,285 B (v0.2.0 was 41.8 MB), sha256 075a69dc…; contains
+  librizin.so, 25 librz_*.so (librz_arch 44.7 MB), libcore_ghidra.so, assets/inspect/rz-data.zip (370 files:
+  share/rizin types/format/magic/…, AArch64 Sleigh files). Staged Download/DriverLab-inspector-511e1907.apk
+  (sha256 == CI == device). Not installed yet (waiting for the user's OK). NOT device-tested.
+
+**Open / next:** install (user's OK), device test of every screen on the 891 package and Turnip r3; then stage C
+(Vulkan types, LLVM / Mesa real source for matching functions).
+
+### Lessons learned
+- Never write `/*` inside a Kotlin comment (paths like `dir/*.c`): Kotlin comments nest.
 
 ## 2026-11-02 — MERGED feat/dashboard-ui, RELEASED v0.2.0 (main)
 
