@@ -81,22 +81,35 @@ data class CompareResult(
 /**
  * A running rizin (librizin.so) with the Ghidra decompiler plugin, opened on one file. Commands go in on
  * stdin; with -q0 rizin ends every answer with a zero byte.
+ *
+ * Memory: started from the app it would inherit the app's foreground oom_score_adj (0), so when the
+ * decompiler runs away Android closes other apps first (2026-11-05 it closed Termux). It is started
+ * through sh, which sets oom_score_adj 1000 (closed first) and prints its pid; a watchdog stops it
+ * when its resident memory passes [limitKb].
  */
 class RzSession(context: Context, file: File) : Closeable {
     private val proc: Process
     private val input: BufferedInputStream
     private val writer: OutputStreamWriter
+    private val pid: Int
+    @Volatile private var overLimit = false
+    @Volatile private var closed = false
 
     init {
         val nd = Paths.nativeDir(context)
         val tmp = File(context.cacheDir, "rz").apply { mkdirs() }
         val data = Inspector.dataDir(context)
         val home = File(data, "home").apply { mkdirs() }
-        val pb = ProcessBuilder(
+        val args = listOf(
             File(nd, "librizin.so").absolutePath, "-q0", "-N",
             "-e", "scr.color=0", "-e", "scr.utf8=false", "-e", "scr.interactive=false", "-e", "bin.cache=true",
             "-l", File(nd, "libcore_ghidra.so").absolutePath,
             file.absolutePath,
+        )
+        val q = { a: String -> "'" + a.replace("'", "'\\''") + "'" }
+        val pb = ProcessBuilder(
+            "/system/bin/sh", "-c",
+            "echo 1000 > /proc/self/oom_score_adj 2>/dev/null; echo \$\$; exec " + args.joinToString(" ") { q(it) },
         )
         pb.environment()["LD_LIBRARY_PATH"] = nd.absolutePath
         pb.environment()["TMPDIR"] = tmp.absolutePath
@@ -105,6 +118,8 @@ class RzSession(context: Context, file: File) : Closeable {
         proc = pb.start()
         input = BufferedInputStream(proc.inputStream, 1 shl 16)
         writer = OutputStreamWriter(proc.outputStream, Charsets.UTF_8)
+        pid = readLine().trim().toIntOrNull() ?: -1
+        startWatchdog()
         readAnswer()
         cmd("e ghidra.sleighhome=" + File(data, "sleigh").absolutePath)
     }
@@ -117,11 +132,39 @@ class RzSession(context: Context, file: File) : Closeable {
         return readAnswer()
     }
 
+    private fun readLine(): String {
+        val buf = ByteArrayOutputStream()
+        while (true) {
+            val b = input.read()
+            if (b < 0 || b == '\n'.code) break
+            buf.write(b)
+        }
+        return buf.toString("UTF-8")
+    }
+
+    private fun startWatchdog() {
+        if (pid <= 0) return
+        val status = File("/proc/$pid/status")
+        Thread({
+            while (!closed) {
+                val rss = runCatching {
+                    status.readLines().firstOrNull { it.startsWith("VmRSS:") }?.filter { it.isDigit() }?.toLongOrNull()
+                }.getOrNull() ?: break
+                if (rss > limitKb) {
+                    overLimit = true
+                    proc.destroyForcibly()
+                    break
+                }
+                Thread.sleep(300)
+            }
+        }, "rizin-watchdog").apply { isDaemon = true }.start()
+    }
+
     private fun readAnswer(): String {
         val buf = ByteArrayOutputStream()
         while (true) {
             val b = input.read()
-            if (b < 0) throw IOException("The inspector engine stopped.")
+            if (b < 0) throw IOException(if (overLimit) "The decompiler used more than ${limitKb / 1024} MB and was stopped." else "The inspector engine stopped.")
             if (b == 0) break
             buf.write(b)
         }
@@ -130,9 +173,18 @@ class RzSession(context: Context, file: File) : Closeable {
 
     private companion object {
         val ANSI = Regex("\u001b\\[[0-9;?]*[A-Za-z]")
+
+        /** 35 % of the phone's RAM, between 1 and 3 GB (about 2.5 GB on an 8 GB phone). */
+        val limitKb: Long by lazy {
+            val total = runCatching {
+                File("/proc/meminfo").readLines().first { it.startsWith("MemTotal:") }.filter { it.isDigit() }.toLong()
+            }.getOrDefault(8L shl 20)
+            (total * 35 / 100).coerceIn(1L shl 20, 3L shl 20)
+        }
     }
 
     override fun close() {
+        closed = true
         runCatching { writer.write("q!!\n"); writer.flush() }
         proc.destroy()
     }
