@@ -215,6 +215,7 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
         private val SOURCE = Regex("""[\w.+-]+(?:/[\w.+-]+)+\.(?:c|cc|cpp|cxx|h|hpp|inc)""")
         private val QCOM_DETAIL = Regex("""^\s*(Build Date|Shader Compiler Version|Compiler Version|Driver Version|Driver Branch)\s*:\s*(.+)$""")
         private const val MAX_PATHS = 300
+        private val AFL_LINE = Regex("""^(0x[0-9a-fA-F]+)\s+(\d+)\s+(\d+)(?:\s+->\s+(\d+))?\s+(.+)$""")
         /** Larger "functions" are nearly always wrong boundaries; the decompiler can run out of memory on them. */
         const val MAX_DECOMPILE = 256L * 1024
         /** Engine restarts allowed in one source job before it gives up. */
@@ -403,7 +404,7 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
         return file.readLines().mapNotNull { l ->
             val p = l.split('\t')
             if (p.size < 3) null else Fn(p[0].toLongOrNull() ?: return@mapNotNull null, p[2], p[1].toLongOrNull() ?: 0L)
-        }
+        }.ifEmpty { null }
     }
 
     /** Full analysis of the file (about half a minute for a 7–14 MB driver), then the list of functions. */
@@ -411,20 +412,24 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
         if (!refresh) cachedFunctions(f)?.let { return it }
         val list = withSession(f) { s ->
             if (!analysed) { s.cmd("aaa"); analysed = true }
-            parseFunctions(s.cmd("aflj"))
+            parseFunctions(s.cmd("afl"))
         }
         File(dir(f), "functions.tsv").writeText(list.joinToString("") { "${it.addr}\t${it.size}\t${it.name}\n" })
         return list
     }
 
-    private fun parseFunctions(json: String): List<Fn> {
-        val a = runCatching { JSONArray(json.trim().ifEmpty { "[]" }) }.getOrDefault(JSONArray())
-        return List(a.length()) { i ->
-            val o = a.getJSONObject(i)
-            // realsz = bytes of the function's own blocks; size is the span, which wrong boundaries can make megabytes.
-            Fn(o.optLong("offset"), o.optString("name"), o.optLong("realsz", o.optLong("size")))
-        }.sortedBy { it.addr }
-    }
+    /**
+     * Parses rizin's plain `afl` list: address, blocks, span[ -> real size], name (last, may hold spaces).
+     * `aflj` is not used: with every cross-reference in it, a Turnip build gives 30 MB of JSON.
+     * The size kept is the real code size; the span can be megabytes when a jump goes far away.
+     */
+    private fun parseFunctions(text: String): List<Fn> =
+        text.lineSequence().mapNotNull { l ->
+            val m = AFL_LINE.find(l.trim()) ?: return@mapNotNull null
+            val addr = m.groupValues[1].removePrefix("0x").toLongOrNull(16) ?: return@mapNotNull null
+            val size = (m.groupValues[4].ifEmpty { m.groupValues[3] }).toLongOrNull() ?: 0L
+            Fn(addr, m.groupValues[5].trim(), size)
+        }.distinctBy { it.addr }.sortedBy { it.addr }.toList()
 
     // ---- Names, notes, edits ----
 
@@ -554,7 +559,7 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
             try {
                 ensureData()
                 var eng = open()
-                val list = parseFunctions(eng.cmd("aflj"))
+                val list = parseFunctions(eng.cmd("afl"))
                 File(dir(f), "functions.tsv").writeText(list.joinToString("") { "${it.addr}\t${it.size}\t${it.name}\n" })
                 out.deleteRecursively()
                 val fnDir = File(out, "functions").apply { mkdirs() }
