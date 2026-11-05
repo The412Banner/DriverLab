@@ -32,6 +32,12 @@ jobs:
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;${NDK_VERSION}" > /dev/null
           echo "ANDROID_NDK_PATH=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
 
+      - name: Restore host tools (rizin + rz-ghidra processor files for the CI machine)
+        uses: actions/cache@v4
+        with:
+          path: inspect-work/host
+          key: inspect-host-rz0.9.1-gh0.9.0-v1
+
       - name: Build engine
         run: native/inspect/build-inspect.sh
 

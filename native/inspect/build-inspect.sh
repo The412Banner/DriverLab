@@ -21,22 +21,32 @@ TC="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
 
 mkdir -p "$W" "$OUT"
 cd "$W"
+# Runs one build step quietly; on failure prints the end of its log and the meson log if there is one.
+step() {
+	local name="$1"; shift
+	echo "== $name"
+	if ! "$@" > "$W/$name.log" 2>&1; then
+		echo "!! $name failed"; tail -n 80 "$W/$name.log"
+		for m in "$W"/*/meson-logs/meson-log.txt; do [ -f "$m" ] && { echo "-- $m"; tail -n 60 "$m"; }; done
+		exit 1
+	fi
+}
 [ -d rizin ] || git clone -q --depth 1 -b "$RZ_TAG" https://github.com/rizinorg/rizin
 [ -d rz-ghidra ] || git clone -q --depth 1 -b "$GH_TAG" --recurse-submodules --shallow-submodules https://github.com/rizinorg/rz-ghidra
 
 # 1. rizin for the CI machine (only to build rz-ghidra's processor descriptions)
 if [ ! -f host/bin/rizin ]; then
-	meson setup rz-host rizin --buildtype release --prefix="$W/host" -Denable_tests=false >/dev/null
-	ninja -C rz-host install >/dev/null
+	step rz-host-setup meson setup rz-host rizin --buildtype release --prefix="$W/host" -Denable_tests=false
+	step rz-host-build ninja -C rz-host install
 fi
 
 # 2. rz-ghidra for the CI machine: builds and installs the .sla files
 if [ -z "$(find "$W/host" -name 'AARCH64.sla' 2>/dev/null | head -1)" ]; then
-	cmake -S rz-ghidra -B gh-host -G Ninja -DCMAKE_BUILD_TYPE=Release \
+	step gh-host-setup cmake -S rz-ghidra -B gh-host -G Ninja -DCMAKE_BUILD_TYPE=Release \
 		-DCMAKE_PREFIX_PATH="$W/host" -DCMAKE_INSTALL_PREFIX="$W/host" \
-		-DBUILD_SLEIGH_PLUGIN=OFF >/dev/null
-	cmake --build gh-host -j "$JOBS" >/dev/null
-	cmake --install gh-host >/dev/null
+		-DBUILD_SLEIGH_PLUGIN=OFF
+	step gh-host-build cmake --build gh-host -j "$JOBS"
+	step gh-host-install cmake --install gh-host
 fi
 SLA="$(dirname "$(find "$W/host" -name 'AARCH64.sla' | head -1)")"
 echo "processor descriptions: $SLA"
@@ -58,21 +68,21 @@ cpu = 'aarch64'
 endian = 'little'
 EOF
 if [ ! -f android/bin/rizin ]; then
-	meson setup rz-android rizin --cross-file android.ini --buildtype release --prefix="$W/android" \
-		-Denable_tests=false -Dlocal=enabled -Dportable=true >/dev/null
-	ninja -C rz-android install >/dev/null
+	step rz-android-setup meson setup rz-android rizin --cross-file android.ini --buildtype release --prefix="$W/android" \
+		-Denable_tests=false -Dlocal=enabled -Dportable=true
+	step rz-android-build ninja -C rz-android install
 fi
 
 # 4. rz-ghidra for Android (decompiler plugin only; .sla files from step 2)
 if [ -z "$(find "$W/android" -name 'core_ghidra.so' 2>/dev/null | head -1)" ]; then
-	cmake -S rz-ghidra -B gh-android -G Ninja -DCMAKE_BUILD_TYPE=Release \
+	step gh-android-setup cmake -S rz-ghidra -B gh-android -G Ninja -DCMAKE_BUILD_TYPE=Release \
 		-DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
 		-DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM="$API" -DANDROID_STL=c++_static \
 		-DCMAKE_FIND_ROOT_PATH="$W/android" -DCMAKE_PREFIX_PATH="$W/android" \
 		-DCMAKE_INSTALL_PREFIX="$W/android" \
-		-DBUILD_SLASPECS=OFF -DBUILD_SLEIGH_PLUGIN=OFF >/dev/null
-	cmake --build gh-android -j "$JOBS" >/dev/null
-	cmake --install gh-android >/dev/null || true
+		-DBUILD_SLASPECS=OFF -DBUILD_SLEIGH_PLUGIN=OFF
+	step gh-android-build cmake --build gh-android -j "$JOBS"
+	cmake --install gh-android > "$W/gh-android-install.log" 2>&1 || { echo "gh-android install had errors:"; tail -n 20 "$W/gh-android-install.log"; }
 fi
 
 # 5. Collect
