@@ -33,7 +33,20 @@ vendor/qcom/proprietary/graphics/adreno200/.
 **CI:** engine run 42085979040 (0d47399e) failed in the Android rizin step, error hidden by the script; host rizin
 and host rz-ghidra (processor files) built. Script now prints the failing step's log; run 42086993187 (1af3e0f3).
 
-**Open / next:** green engine → device test on the Elite → app screens.
+Run 42086993187 failed: `ld.lld: undefined symbol: ldexpf` in librz_type (Android keeps it in libm) → cross file
+links `-lm`; **run 42088409897 (b08621be) green**: bin/rizin, 27 rizin libraries, core_ghidra.so, AARCH64 Sleigh
+files; tar.gz 14,158,624 B, sha256 a566c899… (host == device).
+
+**Device test (Elite, root, /data/local/tmp/dlinspect) — engine device-proven, app not built yet:**
+- rizin 0.9.1 and the Ghidra plugin load. Needs TMPDIR and HOME set (Android default points at a rizin installer
+  app folder); `ghidra.sleighhome` must be set as a command after load, not with `-e`.
+- Qualcomm v891.7 `vulkan.ad891.so`: `qglinternal::vkCreateDevice` (0x443880, 12,356 B) decompiled to C in 2 s.
+  rizin reads `.gnu_debugdata` itself (the scrambled names show up as symbols).
+- Deep analysis (`aaa`): 891 = 5,277 functions, 27 s, peak 501 MB; Turnip r3 = 5,881 functions, 28 s, 584 MB.
+- 100 functions spread over each file: +2 s (891) / +5 s (Turnip) after analysis → a whole driver is a few minutes.
+- Mesa match check: Turnip `fcn.009cc32c` = Mesa `_vk_device_set_lost` (src/vulkan/runtime/vk_device.c:431).
+
+**Open / next:** package the engine into the APK, Inspect screen, whole-driver source export, Mesa match, compare.
 
 ## 2026-11-02 — MERGED feat/dashboard-ui, RELEASED v0.2.0 (main)
 
