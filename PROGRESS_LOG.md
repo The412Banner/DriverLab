@@ -58,11 +58,28 @@ driver card. Engine rebuilt for the app's folder (/data/user/0/com.driverlab/fil
   share/rizin types/format/magic/…, AArch64 Sleigh files). Staged Download/DriverLab-inspector-511e1907.apk
   (sha256 == CI == device). Not installed yet (waiting for the user's OK). NOT device-tested.
 
-**Open / next:** install (user's OK), device test of every screen on the 891 package and Turnip r3; then stage C
-(Vulkan types, LLVM / Mesa real source for matching functions).
+**Installed 511e1907 on the Elite** (user: "yes install it"): base.apk sha256 075a69dc… == staged.
+**UI test (system driver /vendor/lib64/hw/vulkan.adreno.so), device-proven:** Overview (build date 07/01/25,
+compiler E031.47.18.36, 459 exported, 4,071 symbols, 3,328 scrambled, needed libraries); Find functions = 3,339
+in 25 s; search + open `qglinternal::vkCreateDevice` (0x184f50, 18,044 B) decompiled in the app. Bug: Qualcomm
+"Driver Version : %s" format text shown as the version.
+**INCIDENT 15:21 (device time):** Make source code reached ~572 of 3,339, then Ghidra ran out of memory on a
+function whose span rizin got wrong (aflj `size` up to 3,309,852 B). rizin ran as a child of the foreground app
+(oom_score_adj 0), so lmkd closed background apps and **Termux (the Claude session) at 15:21:16**; rizin aborted at
+15:21:21 (Scudo map failure in ghidra::Heritage::guardStores). The app itself did not crash. User restarted the
+session with `cc -c`.
+**Fixes:** ae192465 = `realsz` instead of `size`, functions over 256 KB skipped, engine restart + skip on a
+decompiler death (skipped.tsv), %s details dropped (run 42102879983 cancelled before it finished);
+1959dade = rizin started through sh with oom_score_adj 1000 and a watchdog that stops it above 35 % of RAM
+(2.5 GB on the Elite). APK run 42103238104.
+
+**Open / next:** green → stage, ask, install; repeat Make source code on the system driver while watching
+memory (rizin oom_score_adj must read 1000); Turnip + compare; then stage C (Vulkan types, LLVM / Mesa source).
 
 ### Lessons learned
 - Never write `/*` inside a Kotlin comment (paths like `dir/*.c`): Kotlin comments nest.
+- A heavy native child of a foreground app outranks Termux for lmkd. Give such children oom_score_adj 1000 and a
+  memory cap before testing them on the device that hosts the session.
 
 ## 2026-11-02 — MERGED feat/dashboard-ui, RELEASED v0.2.0 (main)
 
