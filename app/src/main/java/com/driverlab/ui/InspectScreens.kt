@@ -325,6 +325,8 @@ private fun SourceTab(f: InspectFile, openFunctions: () -> Unit) {
                 if (has) {
                     val count = remember(f.path, job) { AppGraph.inspector.cachedFunctions(f)?.size ?: 0 }
                     Text("Source code made: $count functions.", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    if ((j?.skipped ?: 0) > 0) Text("${j?.skipped} could not be decompiled (listed in skipped.tsv).", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(shape = BtnShape, onClick = openFunctions) { Text("Open") }
                         OutlinedButton(shape = BtnShape, onClick = {

@@ -58,6 +58,7 @@ data class SourceJob(
     val phase: String = "",
     val running: Boolean = false,
     val error: String? = null,
+    val skipped: Int = 0,
 )
 
 data class CompareResult(
@@ -162,6 +163,10 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
         private val SOURCE = Regex("""[\w.+-]+(?:/[\w.+-]+)+\.(?:c|cc|cpp|cxx|h|hpp|inc)""")
         private val QCOM_DETAIL = Regex("""^\s*(Build Date|Shader Compiler Version|Compiler Version|Driver Version|Driver Branch)\s*:\s*(.+)$""")
         private const val MAX_PATHS = 300
+        /** Larger "functions" are nearly always wrong boundaries; the decompiler can run out of memory on them. */
+        const val MAX_DECOMPILE = 256L * 1024
+        /** Engine restarts allowed in one source job before it gives up. */
+        private const val MAX_RESTARTS = 20
     }
 
     private fun stamp(): Long = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime }.getOrDefault(0L)
@@ -290,7 +295,10 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
                 val s = sb.toString()
                 out.write(s); out.write("\n"); count++
                 if (version.isEmpty()) MESA.find(s)?.let { m -> version = "Mesa " + m.groupValues[1]; commit = m.groupValues[2] }
-                QCOM_DETAIL.find(s)?.let { m -> details.putIfAbsent(m.groupValues[1], m.groupValues[2].trim()) }
+                QCOM_DETAIL.find(s)?.let { m ->
+                    val v = m.groupValues[2].trim()
+                    if (v.isNotEmpty() && '%' !in v) details.putIfAbsent(m.groupValues[1], v)
+                }
                 GPU.findAll(s).forEach { gpus += it.groupValues[1] }
                 if (paths.size < MAX_PATHS && '/' in s) SOURCE.findAll(s).forEach { if (paths.size < MAX_PATHS) paths += it.value }
             }
@@ -361,7 +369,8 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
         val a = runCatching { JSONArray(json.trim().ifEmpty { "[]" }) }.getOrDefault(JSONArray())
         return List(a.length()) { i ->
             val o = a.getJSONObject(i)
-            Fn(o.optLong("offset"), o.optString("name"), o.optLong("size"))
+            // realsz = bytes of the function's own blocks; size is the span, which wrong boundaries can make megabytes.
+            Fn(o.optLong("offset"), o.optString("name"), o.optLong("realsz", o.optLong("size")))
         }.sortedBy { it.addr }
     }
 
@@ -481,34 +490,57 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
         running[k] = scope.launch(Dispatchers.IO) {
             val out = sourceDir(f)
             var s: RzSession? = null
+            fun open(): RzSession {
+                s?.close()
+                return RzSession(context, File(f.path)).also { n ->
+                    s = n
+                    jobSessions[k] = n
+                    applyNames(f, n)
+                    n.cmd("aaa")
+                }
+            }
             try {
                 ensureData()
-                s = RzSession(context, File(f.path)).also { jobSessions[k] = it }
-                applyNames(f, s)
-                s.cmd("aaa")
-                val list = parseFunctions(s.cmd("aflj"))
+                var eng = open()
+                val list = parseFunctions(eng.cmd("aflj"))
                 File(dir(f), "functions.tsv").writeText(list.joinToString("") { "${it.addr}\t${it.size}\t${it.name}\n" })
                 out.deleteRecursively()
                 val fnDir = File(out, "functions").apply { mkdirs() }
                 val notes = notes(f)
                 val index = StringBuilder()
+                val skipped = StringBuilder()
+                var restarts = 0
                 _jobs.update { it + (k to SourceJob(0, list.size, "Decompiling", running = true)) }
                 for ((i, fn) in list.withIndex()) {
                     if (!isActive) break
-                    val code = s.cmd("pdg @ ${fn.addr}")
+                    val code = if (fn.size > MAX_DECOMPILE) {
+                        skipped.append("0x%x\t%d\t%s\ttoo large\n".format(fn.addr, fn.size, fn.name))
+                        "// Not decompiled: the analysis made this function ${fn.size} bytes long, which usually means wrong boundaries.\n"
+                    } else try {
+                        clean(eng.cmd("pdg @ ${fn.addr}"))
+                    } catch (e: IOException) {
+                        if (!isActive) throw e
+                        if (++restarts > MAX_RESTARTS) throw IOException("The decompiler stopped $restarts times, last at 0x%x.".format(fn.addr))
+                        skipped.append("0x%x\t%d\t%s\tdecompiler stopped\n".format(fn.addr, fn.size, fn.name))
+                        _jobs.update { it + (k to SourceJob(i, list.size, "Restarting the engine", running = true)) }
+                        eng = open()
+                        "// Not decompiled: the decompiler ran out of memory on this function.\n"
+                    }
                     val name = sourceName(fn)
-                    File(fnDir, name).writeText(header(f, fn.addr, fn.name, fn.size, notes[fn.addr]) + clean(code))
+                    File(fnDir, name).writeText(header(f, fn.addr, fn.name, fn.size, notes[fn.addr]) + code)
                     index.append(fn.addr).append('\t').append(fn.size).append('\t').append(fn.name).append('\t').append(name).append('\n')
                     if (i % 10 == 0 || i == list.size - 1) _jobs.update { it + (k to SourceJob(i + 1, list.size, "Decompiling", running = true)) }
                 }
                 if (isActive) {
                     File(out, "index.tsv").writeText(index.toString())
+                    if (skipped.isNotEmpty()) File(out, "skipped.tsv").writeText(skipped.toString())
                     File(out, "README.txt").writeText(
                         "Decompiled from ${f.label} (${f.size} bytes) by DriverLab with rizin and the Ghidra decompiler.\n" +
                             "This is C rebuilt from machine code, not the original source: names come from the file's own\n" +
-                            "symbols, your renames, or are made up (fcn.<address>). index.tsv: address, size, name, file.\n",
+                            "symbols, your renames, or are made up (fcn.<address>). index.tsv: address, size, name, file.\n" +
+                            (if (skipped.isNotEmpty()) "skipped.tsv: functions that could not be decompiled and why.\n" else ""),
                     )
-                    _jobs.update { it + (k to SourceJob(list.size, list.size, "Done", running = false)) }
+                    _jobs.update { it + (k to SourceJob(list.size, list.size, "Done", running = false, skipped = skipped.lines().count { l -> l.isNotBlank() })) }
                 } else {
                     out.deleteRecursively()
                     _jobs.update { it - k }
