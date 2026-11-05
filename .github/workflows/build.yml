@@ -51,7 +51,7 @@ jobs:
       # 2b. Driver inspector engine (rizin + the Ghidra decompiler, about 16 min), cached by its script.
       - name: Restore inspector engine
         id: inspect
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: inspect-out
           key: inspect-${{ env.NDK_VERSION }}-${{ hashFiles('native/inspect/**') }}
@@ -84,6 +84,14 @@ jobs:
           sudo apt-get install -y -qq cmake bison flex > /dev/null
           pip3 install --break-system-packages -q meson
           INSPECT_OUT="$PWD/inspect-out" INSPECT_WORK="$RUNNER_TEMP/inspect" bash native/inspect/build-inspect.sh
+
+      # Saved right away, so a later failing step does not throw the 16-minute build away.
+      - name: Save inspector engine
+        if: steps.inspect.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: inspect-out
+          key: inspect-${{ env.NDK_VERSION }}-${{ hashFiles('native/inspect/**') }}
 
       # 3. Test catalog for the picker, cached by CTS tag + generator + presets.
       - name: Restore test catalog

@@ -471,7 +471,7 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
     fun hasSource(f: InspectFile) = File(sourceDir(f), "index.tsv").exists()
 
     /**
-     * Decompiles every function of the file into source/functions/*.c with an index. Uses its own engine,
+     * Decompiles every function of the file into source/functions/ (one .c file per function) with an index. Uses its own engine,
      * so the screens can keep working on other files meanwhile; runs until done or stopped.
      */
     fun makeSource(f: InspectFile) {
