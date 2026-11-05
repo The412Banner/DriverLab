@@ -26,8 +26,8 @@ step() {
 	local name="$1"; shift
 	echo "== $name"
 	if ! "$@" > "$W/$name.log" 2>&1; then
-		echo "!! $name failed"; tail -n 80 "$W/$name.log"
-		for m in "$W"/*/meson-logs/meson-log.txt; do [ -f "$m" ] && { echo "-- $m"; tail -n 60 "$m"; }; done
+		echo "!! $name failed"; grep -E -B2 -A8 "FAILED:|error:|ERROR:" "$W/$name.log" | head -n 120; tail -n 15 "$W/$name.log"
+		case "$name" in *-setup) for m in "$W"/*/meson-logs/meson-log.txt; do [ -f "$m" ] && { echo "-- $m"; grep -v "Failed to guess install tag" "$m" | tail -n 60; }; done ;; esac
 		exit 1
 	fi
 }
@@ -60,6 +60,11 @@ ar = '$TC/llvm-ar'
 ranlib = '$TC/llvm-ranlib'
 strip = '$TC/llvm-strip'
 pkg-config = 'false'
+
+[built-in options]
+# Android keeps ldexpf and friends in libm; librz_type does not ask for it.
+c_link_args = ['-lm']
+cpp_link_args = ['-lm']
 
 [host_machine]
 system = 'android'
