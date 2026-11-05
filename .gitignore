@@ -12,3 +12,6 @@ captures/
 app/src/main/jniLibs/
 app/src/main/assets/cts/
 app/src/main/assets/gles/
+/inspect-out/
+/inspect-work/
+app/src/main/assets/inspect/

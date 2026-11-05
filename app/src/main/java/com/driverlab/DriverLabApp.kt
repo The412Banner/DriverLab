@@ -8,6 +8,7 @@ import com.driverlab.core.CtsSetup
 import com.driverlab.core.DriverRepository
 import com.driverlab.core.FeatureChecker
 import com.driverlab.core.FlagCheck
+import com.driverlab.core.Inspector
 import com.driverlab.core.RunManager
 import com.driverlab.core.SelectionStore
 import com.driverlab.core.SessionStore
@@ -63,6 +64,8 @@ object AppGraph {
         private set
     lateinit var speed: SpeedManager
         private set
+    lateinit var inspector: Inspector
+        private set
 
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -78,6 +81,7 @@ object AppGraph {
         flagCheck = FlagCheck(a, drivers, settings, scope)
         features = FeatureChecker(a, drivers, catalog, scope)
         speed = SpeedManager(a, drivers, sessions)
+        inspector = Inspector(a, drivers, scope)
         runs.otherBusy = { speed.isActive }
         scope.launch(Dispatchers.IO) {
             catalog.loadIndex()

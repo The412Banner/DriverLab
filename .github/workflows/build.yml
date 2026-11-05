@@ -48,6 +48,14 @@ jobs:
           path: native-out
           key: native-${{ env.NDK_VERSION }}-api${{ env.DE_ANDROID_API }}-${{ hashFiles('native/**') }}
 
+      # 2b. Driver inspector engine (rizin + the Ghidra decompiler, about 16 min), cached by its script.
+      - name: Restore inspector engine
+        id: inspect
+        uses: actions/cache@v4
+        with:
+          path: inspect-out
+          key: inspect-${{ env.NDK_VERSION }}-${{ hashFiles('native/inspect/**') }}
+
       - name: Free disk space
         if: steps.cts.outputs.cache-hit != 'true'
         run: |
@@ -55,7 +63,7 @@ jobs:
           df -h /
 
       - name: Install NDK
-        if: steps.cts.outputs.cache-hit != 'true' || steps.native.outputs.cache-hit != 'true'
+        if: steps.cts.outputs.cache-hit != 'true' || steps.native.outputs.cache-hit != 'true' || steps.inspect.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ninja-build zip unzip file glslang-tools
@@ -69,6 +77,13 @@ jobs:
       - name: Build native libraries
         if: steps.native.outputs.cache-hit != 'true'
         run: OUT="$PWD/native-out" bash native/build-native.sh
+
+      - name: Build inspector engine
+        if: steps.inspect.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get install -y -qq cmake bison flex > /dev/null
+          pip3 install --break-system-packages -q meson
+          INSPECT_OUT="$PWD/inspect-out" INSPECT_WORK="$RUNNER_TEMP/inspect" bash native/inspect/build-inspect.sh
 
       # 3. Test catalog for the picker, cached by CTS tag + generator + presets.
       - name: Restore test catalog
@@ -97,6 +112,12 @@ jobs:
           echo "GLES programs: $(ls "$J"/libtest_*.so | wc -l)"
           cp cts-out/vulkan-data.zip cts-out/cts-version.txt "$A/"
           cp catalog-out/* "$A/catalog/"
+          # Driver inspector: the program and libraries go with the native libraries; type data and
+          # processor files are unpacked by the app to files/rz.
+          cp inspect-out/jni/*.so "$J/"
+          mkdir -p app/src/main/assets/inspect
+          (cd inspect-out/rz && zip -qr -9 "$GITHUB_WORKSPACE/app/src/main/assets/inspect/rz-data.zip" .)
+          ls -la app/src/main/assets/inspect
           ls -la "$J" "$A"
           cat "$A/cts-version.txt"
 

@@ -95,6 +95,7 @@ class DriverRepository(private val context: Context) {
     fun delete(id: String) {
         if (id == DriverInfo.SYSTEM_ID) return
         File(root, id).deleteRecursively()
+        File(context.filesDir, "inspect/$id").deleteRecursively()
         reload()
     }
 

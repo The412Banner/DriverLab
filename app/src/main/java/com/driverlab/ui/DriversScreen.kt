@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeveloperBoard
 import androidx.compose.material.icons.filled.Memory
@@ -115,6 +116,7 @@ fun DriversScreen(nav: NavHostController) {
                     onUse = { AppGraph.settings.update { it.copy(driverId = d.id) } },
                     onCheck = { scope.launch { AppGraph.drivers.probe(d.id) } },
                     onOptions = { editing = d },
+                    onInspect = { nav.navigate(route("inspect", d.id)) },
                     onDelete = { deleting = d },
                     modifier = Modifier.animateItem(),
                 )
@@ -203,6 +205,7 @@ private fun DriverCard(
     onUse: () -> Unit,
     onCheck: () -> Unit,
     onOptions: () -> Unit,
+    onInspect: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -280,6 +283,7 @@ private fun DriverCard(
                 if (!inUse) FilledTonalButton(shape = BtnShape, onClick = onUse) { Text("Use") } else AssistChip(onClick = {}, label = { Text("In use") })
                 Spacer(Modifier.weight(1f))
                 IconButton(onClick = onCheck, enabled = !checking) { Icon(Icons.Filled.Refresh, "Check again") }
+                IconButton(onClick = onInspect) { Icon(Icons.Filled.Code, "Inspect") }
                 IconButton(onClick = onOptions) { Icon(Icons.Filled.Tune, "Options") }
                 if (!d.isSystem) IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, "Remove") }
             }

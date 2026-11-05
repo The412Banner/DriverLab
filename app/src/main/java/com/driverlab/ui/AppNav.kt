@@ -125,6 +125,22 @@ fun DriverLabRoot() {
                 ) {
                     RegisterDiffScreen(nav, it.arguments?.getString("a").orEmpty(), it.arguments?.getString("b").orEmpty(), it.arguments?.getString("name").orEmpty())
                 }
+                composable("inspect/{id}", listOf(navArgument("id") { type = NavType.StringType })) {
+                    InspectScreen(nav, it.arguments?.getString("id").orEmpty())
+                }
+                composable(
+                    "inspectfn/{id}/{file}/{addr}",
+                    listOf(navArgument("id") { type = NavType.StringType }, navArgument("file") { type = NavType.StringType }, navArgument("addr") { type = NavType.StringType }),
+                ) {
+                    FunctionScreen(nav, it.arguments?.getString("id").orEmpty(), it.arguments?.getString("file").orEmpty(), it.arguments?.getString("addr").orEmpty())
+                }
+                composable(
+                    "inspectcmp/{a}/{fa}/{b}/{fb}",
+                    listOf("a", "fa", "b", "fb").map { n -> navArgument(n) { type = NavType.StringType } },
+                ) {
+                    val g = { n: String -> it.arguments?.getString(n).orEmpty() }
+                    InspectCompareScreen(nav, g("a"), g("fa"), g("b"), g("fb"))
+                }
                 composable("folder/{id}/{path}", listOf(navArgument("id") { type = NavType.StringType }, navArgument("path") { type = NavType.StringType })) {
                     FolderScreen(nav, it.arguments?.getString("id").orEmpty(), it.arguments?.getString("path").orEmpty())
                 }

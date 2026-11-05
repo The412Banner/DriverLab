@@ -51,7 +51,12 @@ fi
 SLA="$(dirname "$(find "$W/host" -name 'AARCH64.sla' | head -1)")"
 echo "processor descriptions: $SLA"
 
-# 3. rizin for Android (shared libraries, rpath relative to the executable)
+# 3. rizin for Android. Built for the app's own folder: inside the APK the program runs from the
+#    app's library folder, where rizin cannot find its data next to itself, so it falls back to the
+#    folder it was built for (librz/util/path.c). DriverLab unpacks the data there.
+RZ_APP_PREFIX="${RZ_APP_PREFIX:-/data/user/0/com.driverlab/files/rz}"
+DEST="$W/android-dest"
+AP="$DEST$RZ_APP_PREFIX"
 cat > android.ini <<EOF
 [binaries]
 c = '$TC/aarch64-linux-android$API-clang'
@@ -72,30 +77,40 @@ cpu_family = 'aarch64'
 cpu = 'aarch64'
 endian = 'little'
 EOF
-if [ ! -f android/bin/rizin ]; then
-	step rz-android-setup meson setup rz-android rizin --cross-file android.ini --buildtype release --prefix="$W/android" \
+if [ ! -f "$AP/bin/rizin" ]; then
+	step rz-android-setup meson setup rz-android rizin --cross-file android.ini --buildtype release --prefix="$RZ_APP_PREFIX" \
 		-Denable_tests=false -Dlocal=enabled -Dportable=true
-	step rz-android-build ninja -C rz-android install
+	step rz-android-build ninja -C rz-android
+	step rz-android-install meson install -C rz-android --destdir "$DEST"
 fi
 
 # 4. rz-ghidra for Android (decompiler plugin only; .sla files from step 2)
-if [ -z "$(find "$W/android" -name 'core_ghidra.so' 2>/dev/null | head -1)" ]; then
+if [ -z "$(find "$AP" -name 'core_ghidra.so' 2>/dev/null | head -1)" ]; then
 	step gh-android-setup cmake -S rz-ghidra -B gh-android -G Ninja -DCMAKE_BUILD_TYPE=Release \
 		-DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
 		-DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM="$API" -DANDROID_STL=c++_static \
-		-DCMAKE_FIND_ROOT_PATH="$W/android" -DCMAKE_PREFIX_PATH="$W/android" \
-		-DCMAKE_INSTALL_PREFIX="$W/android" \
+		-DCMAKE_FIND_ROOT_PATH="$AP" -DCMAKE_PREFIX_PATH="$AP" \
+		-DCMAKE_INSTALL_PREFIX="$AP" \
 		-DBUILD_SLASPECS=OFF -DBUILD_SLEIGH_PLUGIN=OFF
 	step gh-android-build cmake --build gh-android -j "$JOBS"
 	cmake --install gh-android > "$W/gh-android-install.log" 2>&1 || { echo "gh-android install had errors:"; tail -n 20 "$W/gh-android-install.log"; }
 fi
 
-# 5. Collect
-rm -rf "$OUT"; mkdir -p "$OUT/bin" "$OUT/lib" "$OUT/share/sleigh"
-cp "$W/android/bin/rizin" "$OUT/bin/"
-find "$W/android" -name '*.so*' -type f -exec cp {} "$OUT/lib/" \;
-cp "$SLA"/AARCH64*.sla "$SLA"/AARCH64*.ldefs "$SLA"/AARCH64*.pspec "$SLA"/AARCH64*.cspec "$OUT/share/sleigh/" 2>/dev/null || true
-cp "$SLA"/ARM*.sla "$SLA"/ARM*.ldefs "$SLA"/ARM*.pspec "$SLA"/ARM*.cspec "$OUT/share/sleigh/" 2>/dev/null || true
-"$TC/llvm-strip" "$OUT/bin/rizin" "$OUT"/lib/*.so* 2>/dev/null || true
-echo "== engine"; ls -la "$OUT/bin" "$OUT/lib" | head -60; ls "$OUT/share/sleigh" | head -40
-file "$OUT/bin/rizin" "$OUT"/lib/core_ghidra.so 2>/dev/null || true
+# 5. Collect, two layouts:
+#    $OUT/jni/   for the APK: librizin.so (the program), librz_*.so, libcore_ghidra.so (the decompiler)
+#    $OUT/rz/    the data DriverLab unpacks to files/rz: share/rizin/ (types, formats, ...) and sleigh/
+#    $OUT/tree/  bin/ lib/ share/ to run straight from a folder (device tests from /data/local/tmp)
+rm -rf "$OUT"; mkdir -p "$OUT/jni" "$OUT/rz/sleigh" "$OUT/tree/bin" "$OUT/tree/lib"
+GH_SO="$(find "$AP" -name 'core_ghidra.so' | head -1)"
+cp "$AP/bin/rizin" "$OUT/jni/librizin.so"
+find "$AP/lib" -maxdepth 1 -name 'librz_*.so' -type f -exec cp {} "$OUT/jni/" \;
+cp "$GH_SO" "$OUT/jni/libcore_ghidra.so"
+cp -r "$AP/share" "$OUT/rz/share"
+rm -rf "$OUT/rz/share/rizin/fortunes" "$OUT/rz/share/man" "$OUT/rz/share/doc"
+for e in sla ldefs pspec cspec; do cp "$SLA"/AARCH64*."$e" "$OUT/rz/sleigh/"; done
+"$TC/llvm-strip" --strip-unneeded "$OUT"/jni/*.so
+cp "$OUT/jni/librizin.so" "$OUT/tree/bin/rizin"
+cp "$OUT"/jni/librz_*.so "$OUT/jni/libcore_ghidra.so" "$OUT/tree/lib/"
+cp -r "$OUT/rz/share" "$OUT/rz/sleigh" "$OUT/tree/"
+echo "== engine"; ls -la "$OUT/jni"; du -sh "$OUT/rz/share/rizin"/* | sort -h | tail -12; ls "$OUT/rz/sleigh"
+"$TC/llvm-readelf" -d "$OUT/jni/librizin.so" "$OUT/jni/libcore_ghidra.so" | grep -E "NEEDED|RUNPATH|File:"
