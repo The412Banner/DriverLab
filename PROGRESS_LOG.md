@@ -2,6 +2,39 @@
 
 Newest first.
 
+## 2026-11-05 — Driver inspector: decompile, source code, compare (feat/driver-inspector, IN PROGRESS)
+
+**Why:** user: "is there a decompile process we can build in that could convert the driver to code to view for cases
+like this when we can't find source code"; "I want sourcecode created also"; "import any driver like you normally
+already do, decompile and provide it still source code to view and edit"; "also to compare against another";
+"there has to be a way to get original code via some method we can build into the driver inspection".
+
+**Plan:**
+1. Engine: rizin v0.9.1 + rz-ghidra v0.9.0 (LGPL-3.0; Ghidra decompiler Apache-2.0) built for Android arm64 with
+   NDK 29 (`native/inspect/build-inspect.sh`, workflow `inspect-engine.yml`, push-triggered on this branch). Prove
+   it on the Elite: run from /data/local/tmp, decompile functions of an imported Qualcomm driver and a Turnip.
+2. App: Inspect screen for imported drivers: overview (version, GPUs, size, needed libraries, exports), text,
+   functions.
+3. Source code: decompile every function into C files in the driver's folder (background, progress, stop), viewer
+   with search, editor (save edits; renames and notes are kept and re-applied), zip export.
+4. Closer to the original: unpack `.gnu_debugdata` names; for parts that come from open source (Mesa, LLVM,
+   SPIR-V tools) show the real source by name or by matching against a build of the same version with symbols;
+   Vulkan types; assert texts and source paths found in the file shown next to the code.
+5. Compare two drivers: version, GPUs, exports, text, functions added / removed / changed.
+
+**Found in the Qualcomm 891 package (v891.7):** no `.symtab` or `.debug_*`, but every library has `.gnu_debugdata`
+(Android's compressed symbol table) and a `.gnu_debuglink` (the full debug file is not shipped).
+`vulkan.ad891.so`: 618 exported functions; all 6,051 internal names are scrambled (`!!!0000!<hash>!90f9df54ec!`).
+`libgsl.so`: 186 internal, all scrambled. `libllvm-qgl.so` (61 MB shader compiler, "based on LLVM 17.0.1"):
+77,284 readable C++ names with argument types (about 66,800 LLVM / clang / std, 2,600 SPIR-V translator, 9,200
+Qualcomm QGPU / adreno_compiler). Assert texts are literal pieces of source; paths under
+vendor/qcom/proprietary/graphics/adreno200/.
+
+**CI:** engine run 42085979040 (0d47399e) failed in the Android rizin step, error hidden by the script; host rizin
+and host rz-ghidra (processor files) built. Script now prints the failing step's log; run 42086993187 (1af3e0f3).
+
+**Open / next:** green engine → device test on the Elite → app screens.
+
 ## 2026-11-02 — MERGED feat/dashboard-ui, RELEASED v0.2.0 (main)
 
 User: "after you fix it and verify its built green and fixed merge it to the main branch and release a new stable".
