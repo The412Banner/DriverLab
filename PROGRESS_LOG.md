@@ -73,8 +73,24 @@ decompiler death (skipped.tsv), %s details dropped (run 42102879983 cancelled be
 1959dade = rizin started through sh with oom_score_adj 1000 and a watchdog that stops it above 35 % of RAM
 (2.5 GB on the Elite). APK run 42103238104.
 
-**Open / next:** green → stage, ask, install; repeat Make source code on the system driver while watching
-memory (rizin oom_score_adj must read 1000); Turnip + compare; then stage C (Vulkan types, LLVM / Mesa source).
+**1959dade installed and retested (device time 15:37–15:49), device-proven:** Make source code on the system
+driver = all 3,339 functions → 50 MB of C in 675 s; 4 in skipped.tsv (2 × Ghidra SIGSEGV in
+ActionLaneDivide::processVarnode, 2 stopped by the 2.5 GB watchdog); engine restarted 3 times; root monitor:
+rizin oom_score_adj 1000 in every sample, lowest MemAvailable 1,607 MB, Termux alive throughout, 0 app crashes.
+**Bug found on Turnip r4-A8xx:** Find functions showed 0. `aflj` there is 30 MB of JSON (all cross-references)
+and the parse failed inside runCatching. **659b7f5e:** functions read from the plain `afl` list (address,
+blocks, span[ -> real size], name); an empty cached list counts as not found. (`afl` shows e.g.
+`3309852 -> 32` for the Qualcomm vkCmdPushConstants2KHR thunk: span vs real size.)
+**659b7f5e installed (run 42107934572, sha256 fcb1b761…), device-proven:** r4-A8xx: 5,880 functions in 36 s;
+fcn.003876c0 decompiles to Turnip's driconf option reads (tu_dont_care_as_load, force_vk_vendor, …). Compare
+r4-A8xx vs r4: 5 s; GPUs only in A8xx: 825, 812; exports/libraries equal; text 667 only in A / 653 only in B;
+"compare functions" = 30 s but only 1 named function each (stripped Turnip, so name-based compare says
+nothing there). Monitor: lowest MemAvailable 3,338 MB, rizin max 607 MB, Termux alive, 0 crashes.
+
+**Open / next:** accuracy check (user's idea): build a Banners-Turnip driver with debug info, strip a copy,
+make source in DriverLab, score against the debug info. Compare functions of stripped drivers by code
+fingerprint instead of name. Stage C (Vulkan types, Mesa / LLVM source for matching functions). Make source
+code should run in a foreground service so it keeps going when the app is in the background.
 
 ### Lessons learned
 - Never write `/*` inside a Kotlin comment (paths like `dir/*.c`): Kotlin comments nest.
