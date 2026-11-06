@@ -448,7 +448,7 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
         val nf = namesFile(f)
         if (nf != null) {
             val names = nf.engineNames
-            nf.fns.chunked(200).forEach { c -> s.cmd(c.joinToString(";") { "f ${names[it.addr]} ${it.size} @ ${it.addr}" }) }
+            batch(s, nf.fns.map { "f ${names[it.addr]} ${it.size} @ ${it.addr}" })
             applyNames(f, s)                                             // your own names win
             return names.keys
         }
@@ -456,10 +456,24 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
         // aaa, and slightly better (lab probe 42222957811). Variables are analysed once, by aaa.
         val seeds = ElfFacts.codePointers(File(f.path))
         s.cmd("e anal.vars=false")
-        seeds.sorted().chunked(100).forEach { c -> s.cmd(c.joinToString(";") { "af @ $it" }) }
+        batch(s, seeds.sorted().map { "af @ $it" })
         s.cmd("e anal.vars=true")
         s.cmd("aaa")
         return seeds
+    }
+
+    /**
+     * Sends many commands joined with ";" in lines of at most 3,000 characters: rizin reads about 4 KB
+     * of one input line and drops the rest (lines of 200 names lost about half of them, 2026-11-06).
+     */
+    private fun batch(s: RzSession, cmds: List<String>) {
+        val line = StringBuilder()
+        for (c in cmds) {
+            if (line.isNotEmpty() && line.length + 1 + c.length > 3000) { s.cmd(line.toString()); line.setLength(0) }
+            if (line.isNotEmpty()) line.append(';')
+            line.append(c)
+        }
+        if (line.isNotEmpty()) s.cmd(line.toString())
     }
 
     /** Before decompiling [addr]: the function exists and, with a names file, carries its real name. */
@@ -508,6 +522,11 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
     fun buildId(f: InspectFile): String? = ElfFacts.buildId(File(f.path))
 
     private fun checkedFile(f: InspectFile) = File(dir(f), "names-online.checked")
+    private fun removedFile(f: InspectFile) = File(dir(f), "names-file.removed")
+    private val namesMutex = Mutex()
+
+    /** True after the user removed this file's names file: it is not looked up by itself again. */
+    fun removedByUser(f: InspectFile): Boolean = removedFile(f).exists()
 
     /** True when an online lookup for this file found nothing in the last day (asked again after that). */
     fun checkedRecently(f: InspectFile): Boolean =
@@ -517,25 +536,27 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
      * Looks for this file's names file in the Banners-Turnip releases on GitHub. Only call it when the user
      * allowed online names files. A found file is kept, so the driver works offline afterwards.
      */
-    suspend fun findNamesOnline(f: InspectFile): NamesFile? = withContext(Dispatchers.IO) {
-        val id = buildId(f) ?: return@withContext null
-        val tmp = File(context.cacheDir, "names-${f.key}.dl")
+    suspend fun findNamesOnline(f: InspectFile): NamesFile? = withContext(Dispatchers.IO) { namesMutex.withLock {
+        namesFile(f)?.let { return@withLock it }                         // another lookup was quicker
+        val id = buildId(f) ?: return@withLock null
+        val tmp = File.createTempFile("names-", ".dl", context.cacheDir)
         try {
             val hint = drivers.get(f.driverId)?.name.orEmpty()
             if (!NamesOnline.fetch(id, hint, tmp)) {
                 checkedFile(f).writeText(id)
-                return@withContext null
+                return@withLock null
             }
             checkedFile(f).delete()
             loadNamesFile(f, tmp.inputStream())
         } finally {
             tmp.delete()
         }
-    }
+    } }
 
     /** One-time download for offline use: the names file of every library of every imported driver that has none yet. */
     suspend fun downloadAllNames(progress: (done: Int, total: Int, found: Int) -> Unit): Int = withContext(Dispatchers.IO) {
-        val todo = drivers.drivers.value.filter { !it.isSystem }.flatMap { files(it.id) }.filter { namesFile(it) == null && buildId(it) != null }
+        val todo = drivers.drivers.value.filter { !it.isSystem }.flatMap { files(it.id) }
+            .filter { namesFile(it) == null && !removedByUser(it) && buildId(it) != null }
         var found = 0
         todo.forEachIndexed { i, f ->
             progress(i, todo.size, found)
@@ -547,7 +568,7 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
 
     /** Loads a names file the user picked; it must carry this file's build ID. */
     suspend fun loadNamesFile(f: InspectFile, input: InputStream): NamesFile = withContext(Dispatchers.IO) {
-        val tmp = File(context.cacheDir, "names-${f.key}.tmp")
+        val tmp = File.createTempFile("names-", ".tmp", context.cacheDir)
         try {
             input.use { i -> tmp.outputStream().use { i.copyTo(it) } }
             val nf = runCatching { NamesFile.read(tmp) }.getOrElse { throw IOException("This is not a DriverLab names file.") }
@@ -556,6 +577,7 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
                 throw IOException("This names file is for another driver file (build ID ${nf.buildId.take(12)}…, this file ${id?.take(12) ?: "has none"}).")
             }
             tmp.copyTo(namesFileOf(f), overwrite = true)
+            removedFile(f).delete()
             synchronized(namesLoaded) { namesLoaded[f.path] = nf }
             resetAnalysis(f)
             nf
@@ -566,6 +588,7 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
 
     suspend fun removeNamesFile(f: InspectFile) = withContext(Dispatchers.IO) {
         namesFileOf(f).delete()
+        removedFile(f).writeText("1")
         synchronized(namesLoaded) { namesLoaded[f.path] = null }
         resetAnalysis(f)
     }
@@ -651,9 +674,13 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
         append('\n')
     }
 
-    private fun clean(code: String): String =
-        code.lines().filterNot { it.startsWith("// WARNING: [rz-ghidra]") || it.startsWith("// args may be inaccurate") }
-            .joinToString("\n").trim() + "\n"
+    /** Decompiler output without its "// WARNING:" notes (dozens on a large function), counted in one line. */
+    private fun clean(code: String): String {
+        val lines = code.lines()
+        val kept = lines.filterNot { it.startsWith("// WARNING:") || it.startsWith("// args may be inaccurate") }
+        val hidden = lines.count { it.startsWith("// WARNING:") && !it.startsWith("// WARNING: [rz-ghidra]") }
+        return (if (hidden > 0) "// ($hidden decompiler notes hidden)\n" else "") + kept.joinToString("\n").trim() + "\n"
+    }
 
     /** C code for one function: your edited copy if there is one, else the made source, else decompiled now. */
     suspend fun code(f: InspectFile, addr: Long): String {

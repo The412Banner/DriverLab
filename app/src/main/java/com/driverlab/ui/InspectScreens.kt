@@ -237,15 +237,19 @@ private fun NamesFileCard(f: InspectFile) {
     var looking by remember(f.path) { mutableStateOf(false) }
     var notFound by remember(f.path, version) { mutableStateOf(AppGraph.inspector.checkedRecently(f)) }
     var asking by remember { mutableStateOf(false) }
-    fun lookOnline() = scope.launch {
+    // One lookup at a time: Allow changes the setting, which starts the lookup below by itself.
+    fun lookOnline() {
+        if (looking) return
         looking = true; error = null
-        runCatching { AppGraph.inspector.findNamesOnline(f) }
-            .onSuccess { if (it != null) version++ else notFound = true }
-            .onFailure { error = it.message }
-        looking = false
+        scope.launch {
+            runCatching { AppGraph.inspector.findNamesOnline(f) }
+                .onSuccess { if (it != null) version++ else notFound = true }
+                .onFailure { error = it.message }
+            looking = false
+        }
     }
     LaunchedEffect(f.path, id, settings.onlineNames) {
-        if (id != null && nf == null && settings.onlineNames == 1 && !AppGraph.inspector.checkedRecently(f)) lookOnline()
+        if (id != null && nf == null && settings.onlineNames == 1 && !AppGraph.inspector.checkedRecently(f) && !AppGraph.inspector.removedByUser(f)) lookOnline()
     }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
