@@ -48,6 +48,10 @@ import com.driverlab.core.CtsSetup
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material3.OutlinedButton
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -194,11 +198,11 @@ private const val CREDITS =
 /** One-time download of the names files of all imported drivers, so the inspector has them offline. */
 @Composable
 private fun NamesPackCard() {
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
-    var status by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
-    var busy by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    var status by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
     SettingCard("Names for all my drivers", status ?: "Downloads them once; after that they work offline") {
-        androidx.compose.material3.OutlinedButton(enabled = !busy, onClick = {
+        OutlinedButton(enabled = !busy, onClick = {
             busy = true
             scope.launch {
                 val found = runCatching {
