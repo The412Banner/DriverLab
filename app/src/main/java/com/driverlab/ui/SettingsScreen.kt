@@ -155,6 +155,13 @@ fun SettingsScreen(nav: NavHostController) {
                     )
                 }
             }
+            item { SectionTitle("Driver inspector") }
+            item {
+                SwitchRow("Find names files online", "Real function names for Banners-Turnip drivers from github.com. Only the file's build ID is sent.", s.onlineNames == 1) { v ->
+                    AppGraph.settings.update { it.copy(onlineNames = if (v) 1 else 2) }
+                }
+            }
+            if (s.onlineNames == 1) item { NamesPackCard() }
             item { SectionTitle("About") }
             item {
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh), border = cardLine()) {
@@ -183,6 +190,26 @@ private const val CREDITS =
         "recording the Qualcomm driver come from Rob Clark's freedreno tools (MIT). Turnip recordings use Mesa's own FD_RD_DUMP.\n\n" +
         "Inspired by the adreno-cmdstream-gather app by Huggo, shared by vauzi (Vauzi-17), whose Adreno 710/720/722 work " +
         "started this. Built for Banners-Turnip by The412Banner."
+
+/** One-time download of the names files of all imported drivers, so the inspector has them offline. */
+@Composable
+private fun NamesPackCard() {
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var status by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    var busy by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    SettingCard("Names for all my drivers", status ?: "Downloads them once; after that they work offline") {
+        androidx.compose.material3.OutlinedButton(enabled = !busy, onClick = {
+            busy = true
+            scope.launch {
+                val found = runCatching {
+                    AppGraph.inspector.downloadAllNames { done, total, found -> status = "Checked $done of $total files · $found found" }
+                }
+                status = found.fold({ n -> if (n == 0) "Nothing new found" else "$n names files saved" }, { e -> "Stopped: ${e.message}" })
+                busy = false
+            }
+        }) { Text(if (busy) "Downloading…" else "Download") }
+    }
+}
 
 @Composable
 private fun SettingCard(title: String, sub: String, content: @Composable () -> Unit) {

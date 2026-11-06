@@ -33,6 +33,8 @@ data class AppSettings(
     val speedPause: Int = 10,
     /** Speed test scenes, comma-separated ids ("" = all). */
     val speedScenes: String = "",
+    /** Names files from GitHub: 0 not asked yet, 1 allowed, 2 not allowed. */
+    val onlineNames: Int = 0,
 ) {
     val captureCapBytes: Long
         get() = when (captureLevel) {
@@ -77,6 +79,7 @@ class SettingsStore(context: Context) {
         speedSeconds = prefs.getInt("speedSeconds", 5),
         speedPause = prefs.getInt("speedPause", 10),
         speedScenes = prefs.getString("speedScenes", "") ?: "",
+        onlineNames = prefs.getInt("onlineNames", 0),
     )
 
     fun update(block: (AppSettings) -> AppSettings) {
@@ -102,6 +105,7 @@ class SettingsStore(context: Context) {
             .putInt("speedSeconds", s.speedSeconds)
             .putInt("speedPause", s.speedPause)
             .putString("speedScenes", s.speedScenes)
+            .putInt("onlineNames", s.onlineNames)
             .apply()
         _state.value = s
     }

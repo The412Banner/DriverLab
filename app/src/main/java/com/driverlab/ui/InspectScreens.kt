@@ -222,16 +222,31 @@ private fun OverviewTab(f: InspectFile) {
 
 /**
  * Names file (symbols-<build ID>.tsv.gz from the driver's Banners-Turnip release): real function names
- * and Mesa source lines for a stripped driver.
+ * and Mesa source lines for a stripped driver. Found online only after the user allowed it; a found or
+ * loaded file is kept, so it works offline.
  */
 @Composable
 private fun NamesFileCard(f: InspectFile) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val settings by AppGraph.settings.state.collectAsStateWithLifecycle()
     var version by remember(f.path) { mutableIntStateOf(0) }
     val nf = remember(f.path, version) { AppGraph.inspector.namesFile(f) }
     val id by produceState<String?>(null, f.path) { value = withContext(Dispatchers.IO) { AppGraph.inspector.buildId(f) } }
     var error by remember(f.path) { mutableStateOf<String?>(null) }
+    var looking by remember(f.path) { mutableStateOf(false) }
+    var notFound by remember(f.path, version) { mutableStateOf(AppGraph.inspector.checkedRecently(f)) }
+    var asking by remember { mutableStateOf(false) }
+    fun lookOnline() = scope.launch {
+        looking = true; error = null
+        runCatching { AppGraph.inspector.findNamesOnline(f) }
+            .onSuccess { if (it != null) version++ else notFound = true }
+            .onFailure { error = it.message }
+        looking = false
+    }
+    LaunchedEffect(f.path, id, settings.onlineNames) {
+        if (id != null && nf == null && settings.onlineNames == 1 && !AppGraph.inspector.checkedRecently(f)) lookOnline()
+    }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
@@ -244,15 +259,50 @@ private fun NamesFileCard(f: InspectFile) {
     }
     InspectCard {
         SectionTitle("Names file")
-        if (nf != null) {
-            InfoLine("Loaded", "${nf.fns.size} names" + if (nf.release.isNotEmpty()) " · ${nf.release}" else "")
-            TextButton(onClick = { scope.launch { AppGraph.inspector.removeNamesFile(f); version++ } }) { Text("Remove") }
-        } else {
-            InfoLine("File", id?.let { "symbols-$it.tsv.gz" } ?: "this file has no build ID", mono = id != null)
-            if (id != null) OutlinedButton(shape = BtnShape, onClick = { picker.launch(arrayOf("*/*")) }) { Text("Load names file") }
+        when {
+            nf != null -> {
+                InfoLine("Loaded", "${nf.fns.size} names" + if (nf.release.isNotEmpty()) " · ${nf.release}" else "")
+                TextButton(onClick = { scope.launch { AppGraph.inspector.removeNamesFile(f); version++ } }) { Text("Remove") }
+            }
+            id == null -> InfoLine("File", "this file has no build ID")
+            else -> {
+                InfoLine("File", "symbols-$id.tsv.gz", mono = true)
+                if (looking) {
+                    Text("Looking online…", style = MaterialTheme.typography.bodySmall)
+                    LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 4.dp))
+                } else if (notFound) {
+                    Text("None online for this file.", style = MaterialTheme.typography.bodySmall)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (!looking && settings.onlineNames != 2) OutlinedButton(shape = BtnShape, onClick = {
+                        if (settings.onlineNames == 1) lookOnline() else asking = true
+                    }) { Text(if (notFound) "Look again" else "Find online") }
+                    OutlinedButton(shape = BtnShape, onClick = { picker.launch(arrayOf("*/*")) }) { Text("Load file") }
+                }
+            }
         }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
     }
+    if (asking) NamesOnlineDialog(onDismiss = { asking = false }) { allow ->
+        asking = false
+        AppGraph.settings.update { it.copy(onlineNames = if (allow) 1 else 2) }
+        if (allow) lookOnline()
+    }
+}
+
+/** Asked once before DriverLab goes online for names files; the answer can be changed in Settings. */
+@Composable
+fun NamesOnlineDialog(onDismiss: () -> Unit, onAnswer: (Boolean) -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Find names files online?") },
+        text = {
+            Text("DriverLab looks for the driver's names file in the Banners-Turnip releases on github.com. " +
+                "It sends the file's build ID, nothing else. Files it finds are kept, so they work offline.")
+        },
+        confirmButton = { TextButton(onClick = { onAnswer(true) }) { Text("Allow") } },
+        dismissButton = { TextButton(onClick = { onAnswer(false) }) { Text("Don't allow") } },
+    )
 }
 
 @Composable

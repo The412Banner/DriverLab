@@ -492,6 +492,44 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
     /** GNU build ID of the file: the names file for it is symbols-<build ID>.tsv.gz. */
     fun buildId(f: InspectFile): String? = ElfFacts.buildId(File(f.path))
 
+    private fun checkedFile(f: InspectFile) = File(dir(f), "names-online.checked")
+
+    /** True when an online lookup for this file found nothing in the last day (asked again after that). */
+    fun checkedRecently(f: InspectFile): Boolean =
+        checkedFile(f).let { it.exists() && System.currentTimeMillis() - it.lastModified() < 24L * 3600 * 1000 }
+
+    /**
+     * Looks for this file's names file in the Banners-Turnip releases on GitHub. Only call it when the user
+     * allowed online names files. A found file is kept, so the driver works offline afterwards.
+     */
+    suspend fun findNamesOnline(f: InspectFile): NamesFile? = withContext(Dispatchers.IO) {
+        val id = buildId(f) ?: return@withContext null
+        val tmp = File(context.cacheDir, "names-${f.key}.dl")
+        try {
+            val hint = drivers.get(f.driverId)?.name.orEmpty()
+            if (!NamesOnline.fetch(id, hint, tmp)) {
+                checkedFile(f).writeText(id)
+                return@withContext null
+            }
+            checkedFile(f).delete()
+            loadNamesFile(f, tmp.inputStream())
+        } finally {
+            tmp.delete()
+        }
+    }
+
+    /** One-time download for offline use: the names file of every library of every imported driver that has none yet. */
+    suspend fun downloadAllNames(progress: (done: Int, total: Int, found: Int) -> Unit): Int = withContext(Dispatchers.IO) {
+        val todo = drivers.drivers.value.filter { !it.isSystem }.flatMap { files(it.id) }.filter { namesFile(it) == null && buildId(it) != null }
+        var found = 0
+        todo.forEachIndexed { i, f ->
+            progress(i, todo.size, found)
+            if (runCatching { findNamesOnline(f) }.getOrNull() != null) found++
+        }
+        progress(todo.size, todo.size, found)
+        found
+    }
+
     /** Loads a names file the user picked; it must carry this file's build ID. */
     suspend fun loadNamesFile(f: InspectFile, input: InputStream): NamesFile = withContext(Dispatchers.IO) {
         val tmp = File(context.cacheDir, "names-${f.key}.tmp")
