@@ -2,7 +2,58 @@
 
 Newest first.
 
-## 2026-11-05 — Driver inspector: decompile, source code, compare (feat/driver-inspector, IN PROGRESS)
+## 2026-11-06 — MERGED feat/driver-inspector into main (user: "merge driverlab to main"); no release
+
+**Why:** user asked for a more accurate source-code view ("do all 3"), names files found online with permission
+first ("yes add internet so it finds names files itself with user permission first") and offline use ("can it
+work offline also, a one time pack downloaded to use?"), then "yes install it and test it" and "merge driverlab to main".
+
+**Accuracy check (answer key):** the released Turnip-v27.0.0-20261106-r2-Banners-AIO driver rebuilt with its symbol
+table (Banners-Turnip lab branch lab/aio-debug-r2, run 42202951420): stripped, byte-identical to the release
+(sha256 7f7bbf74), so its 7,755 functions are an exact answer key. Scored in CI with the app's engine and commands.
+
+| | before | merged |
+|---|---|---|
+| real functions found | 62.6 % | 91.4 % |
+| listed functions that are real | 86.0 % | 99.6 % |
+| function size exact | 92.9 % | 94.1 % |
+| real names / Mesa file:line | 0 % | 100 % / ~92 % with a names file |
+
+**Built:**
+- `ElfFacts` (core/DriverSymbols.kt): GNU build ID; code pointers from the dynamic relocations (RELATIVE / ABS64 /
+  GLOB_DAT / JUMP_SLOT and RELR). They become functions before `aaa` (59 s + 61 s in CI; after `aaa` it took
+  328 s): 2,471 of the 2,897 functions `aaa` missed are only reached through such tables.
+- Split-off pieces: a start with no reference, or only jumps, is dropped unless it is a code pointer or has a
+  real name (switch cases the analysis could not follow): 89.2 % → 99.5 % of the list real.
+- Names files (`symbols-<build ID>.tsv.gz`, published with Banners-Turnip releases since A8xx 2345e65f, and on
+  r2): loaded from Overview, checked against the file's build ID; the list, sizes and names come from it; each
+  function shows its Mesa file:line and a **Mesa source** button; names are attached as flags (about 2 s for
+  7,759), so decompiled code shows the real names of the functions it calls.
+- Online (INTERNET permission, used only for this): asked once ("Find names files online?", Allow / Don't
+  allow; Settings → Driver inspector to change); only the build ID is sent; a found file is kept, so it works
+  offline; **Names for all my drivers** downloads them all once. A miss is not asked again for a day; a file the
+  user removed is not fetched again by itself.
+- Decompiler WARNING notes hidden with a count line. Unit test `DriverSymbolsTest` (CI, against the r2 driver).
+
+**CI:** APK builds 42212411572 (dd681fa3), 42225294685 (ce096b67), **42232541616 (411ba0eb, merged)**; unit tests
+pass (Kotlin code pointers 3,232 and build ID == the Python lab code). Lab runs on Banners-Turnip lab/aio-debug-r2:
+42203417311 (first score), 42209146064, 42221729391, 42222957811, 42225205915 (exact app logic).
+
+**Device test (Pocket FIT, A750):** ce096b67: import r2 AIO, Find online → Allow → 7,759 names (r2) in ~5 s;
+7,759 functions with real names in ~4 s; tu_CreateDevice → tu_device.cc:2920; Mesa source button opens GitLab
+at tu_event.cc line 91; without names 83 s, engine peak 642 MB, list identical to CI (91.42 % / 99.58 %).
+Four bugs found → 411ba0eb, installed (sha256 ae445628) and re-tested: tu_SetEvent now calls
+`tu_suballoc_bo_map(...)` by name; Allow gives one lookup and no error; "(27 decompiler notes hidden)"; Remove
+stays removed after reopening, Find online brings it back. 0 FATAL. Not tested on the Elite.
+
+**Lesson (don't repeat):** rizin reads about 4 KB of one input line and silently drops the rest; long `;` command
+batches must be split by length (now ≤3,000 characters), not by count.
+
+**Open / next:** Make source code not re-run on 411ba0eb; run it as a foreground service; the engine stays open
+(~650 MB) while the app sits on the inspector in the background; Vulkan types and Mesa match for other people's
+Turnip builds; no release until the user says so.
+
+## 2026-11-05 — Driver inspector: decompile, source code, compare (feat/driver-inspector; merged 11-06)
 
 **Why:** user: "is there a decompile process we can build in that could convert the driver to code to view for cases
 like this when we can't find source code"; "I want sourcecode created also"; "import any driver like you normally
