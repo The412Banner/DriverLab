@@ -219,6 +219,7 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
         private val SOURCE = Regex("""[\w.+-]+(?:/[\w.+-]+)+\.(?:c|cc|cpp|cxx|h|hpp|inc)""")
         private val QCOM_DETAIL = Regex("""^\s*(Build Date|Shader Compiler Version|Compiler Version|Driver Version|Driver Branch)\s*:\s*(.+)$""")
         private const val MAX_PATHS = 300
+        private val XREF = Regex("""\[(CALL|CODE|DATA|STRING|NULL)""")
         private val AFL_LINE = Regex("""^(0x[0-9a-fA-F]+)\s+(\d+)\s+(\d+)(?:\s+->\s+(\d+))?\s+(.+)$""")
         /** Larger "functions" are nearly always wrong boundaries; the decompiler can run out of memory on them. */
         const val MAX_DECOMPILE = 256L * 1024
@@ -415,7 +416,7 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
     suspend fun functions(f: InspectFile, refresh: Boolean = false): List<Fn> {
         if (!refresh) cachedFunctions(f)?.let { return it }
         val list = withSession(f) { s ->
-            if (!analysed) { s.cmd("aaa"); kept = addFunctions(f, s); analysed = true }
+            if (!analysed) { kept = prepare(f, s); analysed = true }
             finishList(f, s, parseFunctions(s.cmd("afl")), kept)
         }
         File(dir(f), "functions.tsv").writeText(list.joinToString("") { "${it.addr}\t${it.size}\t${it.name}\n" })
@@ -436,29 +437,43 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
         }.distinctBy { it.addr }.sortedBy { it.addr }.toList()
 
     /**
-     * After rizin's own analysis (aaa). With a names file: every function it lists, under its real name.
-     * Without one: a function at every code pointer stored in the file's data, which aaa never starts
-     * from (Vulkan entry points, format and compiler tables: 2,471 of the 2,897 functions it missed on
-     * the Banners-AIO r2 driver). Returns the starts that must stay in the list.
+     * Gets the open engine ready to list and decompile functions; returns the starts that must stay in
+     * the list. With a names file: every function becomes a named flag (about 2 s for 7,759 functions),
+     * so the decompiler prints real names for the functions a function calls, and no full analysis is
+     * needed. Without one: a function at every code pointer stored in the file's data, which rizin's
+     * analysis (aaa) never starts from (Vulkan entry points, format and compiler tables: 2,471 of the
+     * 2,897 functions it missed on the Banners-AIO r2 driver), then aaa; recall 62.6 % to 91.6 %.
      */
-    private fun addFunctions(f: InspectFile, s: RzSession): Set<Long> {
+    private fun prepare(f: InspectFile, s: RzSession): Set<Long> {
         val nf = namesFile(f)
         if (nf != null) {
             val names = nf.engineNames
-            nf.fns.chunked(100).forEach { c -> s.cmd(c.joinToString(";") { "af @ ${it.addr};afn ${names[it.addr]} @ ${it.addr}" }) }
+            nf.fns.chunked(200).forEach { c -> s.cmd(c.joinToString(";") { "f ${names[it.addr]} ${it.size} @ ${it.addr}" }) }
             applyNames(f, s)                                             // your own names win
             return names.keys
         }
+        // Pointers first, then aaa: 59 s + 61 s on the r2 driver in CI, against 56 s + 328 s for af after
+        // aaa, and slightly better (lab probe 42222957811). Variables are analysed once, by aaa.
         val seeds = ElfFacts.codePointers(File(f.path))
-        val have = parseFunctions(s.cmd("afl")).mapTo(HashSet()) { it.addr }
-        (seeds - have).sorted().chunked(100).forEach { c -> s.cmd(c.joinToString(";") { "af @ $it" }) }
+        s.cmd("e anal.vars=false")
+        seeds.sorted().chunked(100).forEach { c -> s.cmd(c.joinToString(";") { "af @ $it" }) }
+        s.cmd("e anal.vars=true")
+        s.cmd("aaa")
         return seeds
+    }
+
+    /** Before decompiling [addr]: the function exists and, with a names file, carries its real name. */
+    private fun ready(f: InspectFile, s: RzSession, addr: Long) {
+        s.cmd("af @ $addr")
+        if (names(f)[addr] == null) namesFile(f)?.engineNames?.get(addr)?.let { s.cmd("afn $it @ $addr") }
     }
 
     /**
      * The function list shown and decompiled. With a names file it is that file's list (real starts,
-     * sizes and names). Without one, starts that are a block of another function are dropped: jump-table
-     * cases and other pieces the analysis split off a real function (788 of its 790 extra starts on r2).
+     * sizes and names). Without one, a start that nothing calls or points to (no references, or only
+     * jumps) is dropped unless it is a code pointer or has a real name: these are the cases of switch
+     * tables the analysis could not follow. On the r2 driver this takes the share of listed functions
+     * that are real from 89.2 % to 99.5 % and loses 0.4 % of the real ones; about 3 s.
      */
     private fun finishList(f: InspectFile, s: RzSession, raw: List<Fn>, keep: Set<Long>): List<Fn> {
         namesFile(f)?.let { nf ->
@@ -466,18 +481,18 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
             val names = nf.engineNames
             return nf.fns.map { Fn(it.addr, own[it.addr] ?: names[it.addr] ?: it.name, it.size) }
         }
-        val starts = raw.mapTo(HashSet()) { it.addr }
-        val pieces = HashSet<Long>()
-        for (fn in raw) {
-            for (line in s.cmd("afb @ ${fn.addr}").lineSequence()) {
-                val b = line.trim().substringBefore(' ')
-                if (!b.startsWith("0x")) continue
-                val a = b.removePrefix("0x").toLongOrNull(16) ?: continue
-                if (a != fn.addr && a in starts) pieces.add(a)
+        return raw.filter { fn ->
+            if (fn.addr in keep || !fn.name.startsWith("fcn.")) return@filter true
+            // Same rule as measured (lab probe 42221729391): no reference, or jumps without a call = a piece.
+            val kinds = s.cmd("axt @ ${fn.addr}").lineSequence().filter { it.isNotBlank() }
+                .map { l -> XREF.find(l)?.groupValues?.get(1) ?: "other" }.toSet()
+            when {
+                kinds.isEmpty() -> false
+                "CALL" in kinds -> true
+                "CODE" in kinds -> false
+                else -> true
             }
         }
-        pieces.removeAll(keep)
-        return raw.filter { it.addr !in pieces }
     }
 
     // ---- Names files ----
@@ -651,8 +666,8 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
     suspend fun decompile(f: InspectFile, addr: Long): String {
         val note = notes(f)[addr]
         return withSession(f) { s ->
-            if (!analysed && namesFile(f) != null) { s.cmd("aaa"); kept = addFunctions(f, s); analysed = true }
-            s.cmd("af @ $addr")
+            if (!analysed && namesFile(f) != null) { kept = prepare(f, s); analysed = true }
+            ready(f, s, addr)
             val info = s.cmd("afi @ $addr")
             val name = Regex("""(?m)^name:\s*(.+)$""").find(info)?.groupValues?.get(1)?.trim() ?: "fcn.%08x".format(addr)
             val size = Regex("""(?m)^size:\s*(\d+)""").find(info)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
@@ -695,8 +710,7 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
                     s = n
                     jobSessions[k] = n
                     applyNames(f, n)
-                    n.cmd("aaa")
-                    keep = addFunctions(f, n)
+                    keep = prepare(f, n)
                 }
             }
             try {
@@ -717,6 +731,7 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
                         skipped.append("0x%x\t%d\t%s\ttoo large\n".format(fn.addr, fn.size, fn.name))
                         "// Not decompiled: the analysis made this function ${fn.size} bytes long, which usually means wrong boundaries.\n"
                     } else try {
+                        ready(f, eng, fn.addr)
                         clean(eng.cmd("pdg @ ${fn.addr}"))
                     } catch (e: IOException) {
                         if (!isActive) throw e
