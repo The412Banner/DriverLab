@@ -199,7 +199,9 @@ class NamesFile(val header: Map<String, String>, val fns: List<NamedFn>) {
                 when (n[i]) { '<', '(' -> depth++; '>', ')' -> depth--; ' ' -> if (depth == 0) space = i }
             }
             if (space > 0) n = n.substring(space + 1)
-            n = n.replace("::", ".").replace(Regex("[^A-Za-z0-9_.]"), "_").replace(Regex("_{3,}"), "__").trim('_')
+            val oddEnd = n.isNotEmpty() && !n.last().isLetterOrDigit() && n.last() != '_'    // "...>" of a template
+            n = n.replace("::", ".").replace(Regex("[^A-Za-z0-9_.]"), "_").replace(Regex("_{3,}"), "__")
+            if (oddEnd) n = n.trimEnd('_')
             return n.ifEmpty { fn.symbol.replace(Regex("[^A-Za-z0-9_.]"), "_") }.take(120)
         }
     }
