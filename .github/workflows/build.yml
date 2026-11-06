@@ -140,6 +140,16 @@ jobs:
         with:
           cache-read-only: false
 
+      # 2c. Unit tests: the names-file and code-pointer readers against a released driver.
+      - name: Unit tests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/testdrv"
+          gh release download v27.0.0-20261106-r2 -R The412Banner/Banners-Turnip -p 'Turnip-v27.0.0-20261106-r2-Banners-AIO.zip' -D "$RUNNER_TEMP/testdrv"
+          unzip -o -q "$RUNNER_TEMP/testdrv/"*.zip -d "$RUNNER_TEMP/testdrv"
+          DRIVERLAB_TEST_SO="$RUNNER_TEMP/testdrv/libvulkan_freedreno.so" ./gradlew --no-daemon testDebugUnitTest
+
       - name: Build APK
         run: ./gradlew :app:assembleRelease --build-cache --stacktrace
 

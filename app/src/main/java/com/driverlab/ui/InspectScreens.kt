@@ -6,6 +6,8 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -31,6 +33,7 @@ import androidx.compose.material.icons.filled.Compare
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Label
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.StickyNote2
@@ -187,6 +190,7 @@ private fun OverviewTab(f: InspectFile) {
                 InfoLine("Size", Fmt.size(o.size))
             }
         }
+        item { NamesFileCard(f) }
         item {
             InspectCard {
                 SectionTitle("Names inside")
@@ -213,6 +217,41 @@ private fun OverviewTab(f: InspectFile) {
             }
         }
         item { TextButton(onClick = { refresh++ }) { Icon(Icons.Filled.Refresh, null); Spacer(Modifier.width(6.dp)); Text("Read again") } }
+    }
+}
+
+/**
+ * Names file (symbols-<build ID>.tsv.gz from the driver's Banners-Turnip release): real function names
+ * and Mesa source lines for a stripped driver.
+ */
+@Composable
+private fun NamesFileCard(f: InspectFile) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var version by remember(f.path) { mutableIntStateOf(0) }
+    val nf = remember(f.path, version) { AppGraph.inspector.namesFile(f) }
+    val id by produceState<String?>(null, f.path) { value = withContext(Dispatchers.IO) { AppGraph.inspector.buildId(f) } }
+    var error by remember(f.path) { mutableStateOf<String?>(null) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            error = null
+            runCatching {
+                val input = context.contentResolver.openInputStream(uri) ?: throw java.io.IOException("Could not open the file.")
+                AppGraph.inspector.loadNamesFile(f, input)
+            }.onSuccess { version++ }.onFailure { error = it.message }
+        }
+    }
+    InspectCard {
+        SectionTitle("Names file")
+        if (nf != null) {
+            InfoLine("Loaded", "${nf.fns.size} names" + if (nf.release.isNotEmpty()) " · ${nf.release}" else "")
+            TextButton(onClick = { scope.launch { AppGraph.inspector.removeNamesFile(f); version++ } }) { Text("Remove") }
+        } else {
+            InfoLine("File", id?.let { "symbols-$it.tsv.gz" } ?: "this file has no build ID", mono = id != null)
+            if (id != null) OutlinedButton(shape = BtnShape, onClick = { picker.launch(arrayOf("*/*")) }) { Text("Load names file") }
+        }
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
     }
 }
 
@@ -412,9 +451,13 @@ fun FunctionScreen(nav: NavHostController, driverId: String, label: String, addr
     val text = code?.getOrNull()
     val title = text?.lineSequence()?.firstOrNull()?.removePrefix("// ")?.trim() ?: hex(addr)
     val byName = remember(f) { f?.let { AppGraph.inspector.cachedFunctions(it) }?.associateBy { it.name }.orEmpty() }
+    val sourceUrl = remember(f, addr) { f?.let { AppGraph.inspector.namesFile(it) }?.let { nf -> nf[addr]?.let { nf.sourceUrl(it) } } }
     Scaffold(topBar = {
         AppBar(title, subtitle = hex(addr) + (if (edited) " · edited" else "") + " · " + shortName(label), onBack = { nav.popBackStack() }, actions = {
             if (text != null && !editing) {
+                if (sourceUrl != null) IconButton(onClick = {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(sourceUrl)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }) { Icon(Icons.Filled.OpenInNew, "Mesa source") }
                 IconButton(onClick = { renaming = true }) { Icon(Icons.Filled.Label, "Rename") }
                 IconButton(onClick = { noting = true }) { Icon(Icons.Filled.StickyNote2, "Note") }
                 IconButton(onClick = { editing = true }) { Icon(Icons.Filled.Edit, "Edit") }

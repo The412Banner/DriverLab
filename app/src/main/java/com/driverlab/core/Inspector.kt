@@ -20,6 +20,7 @@ import java.io.ByteArrayOutputStream
 import java.io.Closeable
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
 import java.io.OutputStreamWriter
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
@@ -201,6 +202,9 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
     private var session: RzSession? = null
     private var sessionFile: String? = null
     private var analysed = false
+    /** Starts that came from code pointers or the names file: never dropped as pieces of another function. */
+    private var kept: Set<Long> = emptySet()
+    private val namesLoaded = HashMap<String, NamesFile?>()
 
     private val _jobs = MutableStateFlow<Map<String, SourceJob>>(emptyMap())
     val jobs: StateFlow<Map<String, SourceJob>> = _jobs.asStateFlow()
@@ -411,8 +415,8 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
     suspend fun functions(f: InspectFile, refresh: Boolean = false): List<Fn> {
         if (!refresh) cachedFunctions(f)?.let { return it }
         val list = withSession(f) { s ->
-            if (!analysed) { s.cmd("aaa"); analysed = true }
-            parseFunctions(s.cmd("afl"))
+            if (!analysed) { s.cmd("aaa"); kept = addFunctions(f, s); analysed = true }
+            finishList(f, s, parseFunctions(s.cmd("afl")), kept)
         }
         File(dir(f), "functions.tsv").writeText(list.joinToString("") { "${it.addr}\t${it.size}\t${it.name}\n" })
         return list
@@ -430,6 +434,96 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
             val size = (m.groupValues[4].ifEmpty { m.groupValues[3] }).toLongOrNull() ?: 0L
             Fn(addr, m.groupValues[5].trim(), size)
         }.distinctBy { it.addr }.sortedBy { it.addr }.toList()
+
+    /**
+     * After rizin's own analysis (aaa). With a names file: every function it lists, under its real name.
+     * Without one: a function at every code pointer stored in the file's data, which aaa never starts
+     * from (Vulkan entry points, format and compiler tables: 2,471 of the 2,897 functions it missed on
+     * the Banners-AIO r2 driver). Returns the starts that must stay in the list.
+     */
+    private fun addFunctions(f: InspectFile, s: RzSession): Set<Long> {
+        val nf = namesFile(f)
+        if (nf != null) {
+            val names = nf.engineNames
+            nf.fns.chunked(100).forEach { c -> s.cmd(c.joinToString(";") { "af @ ${it.addr};afn ${names[it.addr]} @ ${it.addr}" }) }
+            applyNames(f, s)                                             // your own names win
+            return names.keys
+        }
+        val seeds = ElfFacts.codePointers(File(f.path))
+        val have = parseFunctions(s.cmd("afl")).mapTo(HashSet()) { it.addr }
+        (seeds - have).sorted().chunked(100).forEach { c -> s.cmd(c.joinToString(";") { "af @ $it" }) }
+        return seeds
+    }
+
+    /**
+     * The function list shown and decompiled. With a names file it is that file's list (real starts,
+     * sizes and names). Without one, starts that are a block of another function are dropped: jump-table
+     * cases and other pieces the analysis split off a real function (788 of its 790 extra starts on r2).
+     */
+    private fun finishList(f: InspectFile, s: RzSession, raw: List<Fn>, keep: Set<Long>): List<Fn> {
+        namesFile(f)?.let { nf ->
+            val own = names(f)
+            val names = nf.engineNames
+            return nf.fns.map { Fn(it.addr, own[it.addr] ?: names[it.addr] ?: it.name, it.size) }
+        }
+        val starts = raw.mapTo(HashSet()) { it.addr }
+        val pieces = HashSet<Long>()
+        for (fn in raw) {
+            for (line in s.cmd("afb @ ${fn.addr}").lineSequence()) {
+                val b = line.trim().substringBefore(' ')
+                if (!b.startsWith("0x")) continue
+                val a = b.removePrefix("0x").toLongOrNull(16) ?: continue
+                if (a != fn.addr && a in starts) pieces.add(a)
+            }
+        }
+        pieces.removeAll(keep)
+        return raw.filter { it.addr !in pieces }
+    }
+
+    // ---- Names files ----
+
+    private fun namesFileOf(f: InspectFile) = File(dir(f), "names-file.tsv.gz")
+
+    /** The names file loaded for this library file, or null. */
+    fun namesFile(f: InspectFile): NamesFile? = synchronized(namesLoaded) {
+        namesLoaded.getOrPut(f.path) { namesFileOf(f).takeIf { it.exists() }?.let { runCatching { NamesFile.read(it) }.getOrNull() } }
+    }
+
+    /** GNU build ID of the file: the names file for it is symbols-<build ID>.tsv.gz. */
+    fun buildId(f: InspectFile): String? = ElfFacts.buildId(File(f.path))
+
+    /** Loads a names file the user picked; it must carry this file's build ID. */
+    suspend fun loadNamesFile(f: InspectFile, input: InputStream): NamesFile = withContext(Dispatchers.IO) {
+        val tmp = File(context.cacheDir, "names-${f.key}.tmp")
+        try {
+            input.use { i -> tmp.outputStream().use { i.copyTo(it) } }
+            val nf = runCatching { NamesFile.read(tmp) }.getOrElse { throw IOException("This is not a DriverLab names file.") }
+            val id = buildId(f)
+            if (id == null || id != nf.buildId) {
+                throw IOException("This names file is for another driver file (build ID ${nf.buildId.take(12)}…, this file ${id?.take(12) ?: "has none"}).")
+            }
+            tmp.copyTo(namesFileOf(f), overwrite = true)
+            synchronized(namesLoaded) { namesLoaded[f.path] = nf }
+            resetAnalysis(f)
+            nf
+        } finally {
+            tmp.delete()
+        }
+    }
+
+    suspend fun removeNamesFile(f: InspectFile) = withContext(Dispatchers.IO) {
+        namesFileOf(f).delete()
+        synchronized(namesLoaded) { namesLoaded[f.path] = null }
+        resetAnalysis(f)
+    }
+
+    /** The function list and the open engine are made again (names changed). */
+    private suspend fun resetAnalysis(f: InspectFile) {
+        File(dir(f), "functions.tsv").delete()
+        sessionLock.withLock {
+            if (sessionFile == f.path) { session?.close(); session = null; sessionFile = null; analysed = false }
+        }
+    }
 
     // ---- Names, notes, edits ----
 
@@ -489,9 +583,17 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
     // ---- Decompiling ----
 
     private fun header(f: InspectFile, addr: Long, name: String, size: Long, note: String?): String = buildString {
-        append("// ").append(name).append('\n')
-        append("// 0x").append("%x".format(addr)).append(", ").append(size).append(" bytes, ").append(f.label).append('\n')
-        append("// Decompiled by DriverLab (rizin + Ghidra). Not the original source.\n")
+        val nf = namesFile(f)
+        val real = nf?.get(addr)
+        append("// ").append(real?.name ?: name).append('\n')
+        append("// 0x").append("%x".format(addr)).append(", ").append(real?.size ?: size).append(" bytes, ").append(f.label).append('\n')
+        if (real != null && real.file.isNotEmpty()) {
+            append("// Mesa source: ").append(real.file.removePrefix("build:")).append(':').append(real.line)
+            append(if (real.file.startsWith("build:")) " (made during the build)" else "").append('\n')
+            nf.sourceUrl(real)?.let { append("// ").append(it).append('\n') }
+        }
+        append("// Decompiled by DriverLab (rizin + Ghidra). Not the original source")
+        append(if (real != null) "; names from the names file.\n" else ".\n")
         if (!note.isNullOrBlank()) append("// Note: ").append(note).append('\n')
         append('\n')
     }
@@ -511,6 +613,7 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
     suspend fun decompile(f: InspectFile, addr: Long): String {
         val note = notes(f)[addr]
         return withSession(f) { s ->
+            if (!analysed && namesFile(f) != null) { s.cmd("aaa"); kept = addFunctions(f, s); analysed = true }
             s.cmd("af @ $addr")
             val info = s.cmd("afi @ $addr")
             val name = Regex("""(?m)^name:\s*(.+)$""").find(info)?.groupValues?.get(1)?.trim() ?: "fcn.%08x".format(addr)
@@ -547,6 +650,7 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
         running[k] = scope.launch(Dispatchers.IO) {
             val out = sourceDir(f)
             var s: RzSession? = null
+            var keep: Set<Long> = emptySet()
             fun open(): RzSession {
                 s?.close()
                 return RzSession(context, File(f.path)).also { n ->
@@ -554,12 +658,13 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
                     jobSessions[k] = n
                     applyNames(f, n)
                     n.cmd("aaa")
+                    keep = addFunctions(f, n)
                 }
             }
             try {
                 ensureData()
                 var eng = open()
-                val list = parseFunctions(eng.cmd("afl"))
+                val list = finishList(f, eng, parseFunctions(eng.cmd("afl")), keep)
                 File(dir(f), "functions.tsv").writeText(list.joinToString("") { "${it.addr}\t${it.size}\t${it.name}\n" })
                 out.deleteRecursively()
                 val fnDir = File(out, "functions").apply { mkdirs() }
@@ -594,7 +699,7 @@ class Inspector(private val context: Context, private val drivers: DriverReposit
                     File(out, "README.txt").writeText(
                         "Decompiled from ${f.label} (${f.size} bytes) by DriverLab with rizin and the Ghidra decompiler.\n" +
                             "This is C rebuilt from machine code, not the original source: names come from the file's own\n" +
-                            "symbols, your renames, or are made up (fcn.<address>). index.tsv: address, size, name, file.\n" +
+                            "symbols, a names file, your renames, or are made up (fcn.<address>). index.tsv: address, size, name, file.\n" +
                             (if (skipped.isNotEmpty()) "skipped.tsv: functions that could not be decompiled and why.\n" else ""),
                     )
                     _jobs.update { it + (k to SourceJob(list.size, list.size, "Done", running = false, skipped = skipped.lines().count { l -> l.isNotBlank() })) }
