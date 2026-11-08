@@ -104,6 +104,21 @@ is loaded only inside DriverLab's own test program. No root needed.
   both drivers.
 - **Files:** everything a run saved, grouped by driver and session. Read,
   share, save a copy, copy to Downloads, or delete.
+- **Driver inspector** (the code button on any driver in Drivers, including the device's own):
+  - Overview: version, build date, GPUs named in the file, size, needed libraries, exported
+    functions.
+  - Functions: finds the functions in the driver, including the ones only reached through code
+    pointers, and shows each one as C code (decompiled). Rename, add notes and edit the code;
+    they are kept.
+  - **Make source code:** turns every function of the driver into C files, which can be read,
+    searched and saved as a zip to `Download/DriverLab/inspect`. This is rebuilt code, not the
+    original source.
+  - Compare two drivers: version, GPUs, exported functions and text, optionally functions.
+  - Names files: Banners-Turnip releases come with a names file for each driver. With one,
+    functions get their real names, exact sizes and the Mesa file and line they come from, with
+    a button that opens that line in Mesa's source. DriverLab asks once before it looks for
+    names files online. It asks GitHub for the file by the driver's build ID (and its release
+    tag, if the driver's name has one), and keeps a file it finds for offline use. Settings → Driver inspector can download them for all your drivers at once.
 
 After every run DriverLab saves three files to `Download/DriverLab/<date>/`:
 
@@ -126,6 +141,7 @@ choose **Capture set**, keep **System driver**, turn on
 | `libdlrec.so` | records the device driver's GPU submits as `.rd` and logs its kernel calls (`native/dlrec`) |
 | `libtest_*.so` | the OpenGL ES test programs (`native/gles`, freedreno sources) |
 | `libdlbench.so` | the speed test program, headless Vulkan scenes (`native/dlbench`) |
+| `librizin.so`, `librz_*.so`, `libcore_ghidra.so` | the driver inspector's engine: rizin 0.9.1 with the rz-ghidra 0.9.0 decompiler, built from unmodified sources (`native/inspect/build-inspect.sh`) |
 | Mesa's known results | Mesa's Turnip test lists, Vulkan lines only (`tools/make_mesa_expect.py`) |
 | test catalog | a compact index of the CTS test list (`tools/make_catalog.py`) |
 | register names | generated from Mesa's register database (`tools/make_regs.py`) |
@@ -141,6 +157,13 @@ AOSP test key (v1, v2 and v3).
   Font License 1.1 (`app/src/main/assets/licenses/JetBrainsMono-OFL.txt`).
 
 - Khronos Group: Vulkan CTS (Apache 2.0).
+- The rizin developers: rizin (LGPL-3.0), the engine of the driver inspector.
+- The rizin developers: rz-ghidra (LGPL-3.0), which brings the decompiler of Ghidra by the
+  National Security Agency (Apache 2.0), with pugixml by Arseny Kapoulkine (MIT).
+- The libraries rizin bundles, among them Capstone by Nguyen Anh Quynh, zlib, LZ4, Zstandard,
+  XZ Utils, libzip, PCRE2, tree-sitter, libmspack, Berkeley SoftFloat, Zydis, BLAKE2/BLAKE3 and
+  xxHash. The full list with versions and all license texts is in the APK and the repo at
+  `app/src/main/assets/licenses/driver-inspector/`.
 - Rob Clark and the freedreno and Mesa developers: the OpenGL ES test
   programs, the `.rd` format and libwrap, the register database,
   Turnip's `FD_RD_DUMP`, and the `TU_DEBUG` / `IR3_SHADER_DEBUG` settings
