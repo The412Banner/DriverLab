@@ -2,6 +2,36 @@
 
 Newest first.
 
+## 2026-11-08 — RELEASED v0.3.0 stable (main, released)
+
+**Why:** user asked "did we finish the source code work?", then "release it" and picked **Stable v0.3.0**.
+
+**Found before the release:** the inspector APK carried rizin 0.9.1, rz-ghidra 0.9.0 (with Ghidra's decompiler) and
+the libraries rizin bundles, but the README had no inspector section and no credit, and the APK had no license
+texts for them. Fixed in the release cut.
+
+**Built:** backup `refs/backup/20261108/main-before-release-0.3.0` = 4c61a80d. Release cut
+**6b92429e9757fd5b503b310f93ec86d7a82b4f92** "Release 0.3.0 (versionCode 5)": versionCode 4 → 5, versionName 0.3.0;
+`release-notes/v0.3.0.md`; README: Driver inspector section, engine row in How it works, credits;
+`app/src/main/assets/licenses/driver-inspector/` = README.txt (components, versions, upstream sources) + 45 license
+texts (rizin COPYING, COPYING.LESSER and LICENSES/; rz-ghidra; Ghidra LICENSE + NOTICE; pugixml; 20 bundled
+libraries: capstone, zlib, lz4, zstd, xz, libzip, PCRE2, tree-sitter, rizin-grammar-c, rz-libdemangle, libmspack,
+SoftFloat, Zydis + Zycore, BLAKE2, BLAKE3, xxHash, yxml). The bundled list was checked against strings in the shipped
+engine libraries. Engine (native/inspect) unchanged since 6401049; app code == 411ba0eb (device-proven on the Pocket FIT).
+
+**CI:** run **42438933881** (build.yml, release=true, tag v0.3.0, headSha 6b92429e) success.
+
+**Verified:** v0.3.0 is Latest, not a pre-release, tag → 6b92429e; asset DriverLab-v0.3.0-6b92429e.apk 56,859,442 B,
+sha256 d4e37866…2475 == its .sha256 (downloaded); badging com.driverlab versionCode 5 / versionName 0.3.0; v1/v2/v3
+signatures verified in CI (AOSP test key); 46 files under assets/licenses/driver-inspector/ in the APK; release
+notes == release-notes/v0.3.0.md.
+
+**Device:** the release APK is not installed anywhere yet. The Elite runs 659b7f5e (11-05); the Pocket FIT runs
+411ba0eb (per 11-06, not re-checked: ssh had no route on 11-08).
+
+**Open / next:** Make source code on this build; run it as a foreground service; close the engine when the app goes
+to the background; Vulkan types; Mesa match for other Turnip builds; Elite + Duo tests.
+
 ## 2026-11-06 — MERGED feat/driver-inspector into main (user: "merge driverlab to main"); no release
 
 **Why:** user asked for a more accurate source-code view ("do all 3"), names files found online with permission
