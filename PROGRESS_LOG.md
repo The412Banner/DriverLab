@@ -26,8 +26,12 @@ sha256 d4e37866…2475 == its .sha256 (downloaded); badging com.driverlab versio
 signatures verified in CI (AOSP test key); 46 files under assets/licenses/driver-inspector/ in the APK; release
 notes == release-notes/v0.3.0.md.
 
-**Device:** the release APK is not installed anywhere yet. The Elite runs 659b7f5e (11-05); the Pocket FIT runs
-411ba0eb (per 11-06, not re-checked: ssh had no route on 11-08).
+**Device:** user "yes install it on the elite" → staged /sdcard/Download/DriverLab-v0.3.0-6b92429e.apk (sha256
+d4e37866… release == host == device), `pm install -r` from a /data/local/tmp copy (removed) → Success at 21:46:04
+device time; installed base.apk sha256 d4e37866… == release, versionCode 5 / 0.3.0, 27 engine libraries, app data kept
+(5 drivers, settings.xml). Logcat after the install: 0 FATAL EXCEPTION, 0 native crash, crash buffer empty; only the
+two install force-stops. App NOT opened, nothing tested on the device yet. Was 659b7f5e. The Pocket FIT runs 411ba0eb
+(per 11-06, not re-checked: ssh had no route on 11-08).
 
 **Open / next:** Make source code on this build; run it as a foreground service; close the engine when the app goes
 to the background; Vulkan types; Mesa match for other Turnip builds; Elite + Duo tests.
