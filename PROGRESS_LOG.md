@@ -2,6 +2,11 @@
 
 Newest first.
 
+## 2026-11-21 — GPL-3.0 license added (main)
+- Why: no license file; Orion Store marks repos without one "Not Open Source". User picked GPL-3.0.
+- Built: LICENSE (GitHub GPL-3.0 text) + README "License" section (bundled third-party parts keep their own licenses). Branch feat/gpl-license fast-forwarded to main; backup ref refs/backup/20261121/main-before-gpl-license = bc329b53. Same day: fastlane icon added for store listings (feat/fastlane-metadata).
+- Open/Next: Orion submission (user).
+
 ## 2026-11-08 — RELEASED v0.3.0 stable (main, released)
 
 **Why:** user asked "did we finish the source code work?", then "release it" and picked **Stable v0.3.0**.
