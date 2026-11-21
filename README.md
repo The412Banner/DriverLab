@@ -179,3 +179,8 @@ AOSP test key (v1, v2 and v3).
   that fixes it.
 - vauzi (Vauzi-17): for sharing that app and for the Adreno 710/720/722
   register work that started DriverLab.
+
+## License
+
+DriverLab is licensed under the GNU General Public License v3.0 (see [LICENSE](LICENSE)).
+Bundled third-party parts keep their own licenses (see Credits and `app/src/main/assets/licenses/`).
